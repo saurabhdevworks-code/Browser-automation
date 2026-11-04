@@ -1,0 +1,28 @@
+server:
+  port: ${BACKEND_PORT:8080}
+spring:
+  application:
+    name: universal-browser-agent
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/browser_agent}
+    username: ${SPRING_DATASOURCE_USERNAME:browser_agent}
+    password: ${SPRING_DATASOURCE_PASSWORD:change-me-local}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+app:
+  worker-url: ${WORKER_URL:http://localhost:3001}
+  encryption-key: ${APP_ENCRYPTION_KEY:}
+  cors-origin: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

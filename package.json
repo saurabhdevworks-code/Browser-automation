@@ -1,0 +1,10 @@
+{
+  "name": "universal-ai-browser-agent-root",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node run-all.js",
+    "dev": "node run-all.js"
+  }
+}

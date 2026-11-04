@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-browser_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-browser_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local}
+    ports: ["5432:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-browser_agent} -d ${POSTGRES_DB:-browser_agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis_data:/data]
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-browser_agent}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-browser_agent}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local}
+      WORKER_URL: http://browser-worker:3001
+    ports: ["8080:8080"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      browser-worker:
+        condition: service_started
+
+  browser-worker:
+    build: ./browser-worker
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+    ports: ["3001:3001"]
+    init: true
+    shm_size: 1gb
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api/v1
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+volumes:
+  postgres_data:
+  redis_data:
