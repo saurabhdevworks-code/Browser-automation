@@ -816,7 +816,7 @@ export default function App() {
   const pendingApprovalsCount = approvals.filter(a => a.approvalStatus === "PENDING").length;
 
   return (
-    <div className="shell">
+    <div className={`shell ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="brand">
@@ -883,6 +883,16 @@ export default function App() {
               <p>One AI Agent. One Command Interface. Natural-Language Digital Execution.</p>
             </div>
             <div className="headerActions">
+              <button
+                type="button"
+                className="btn btnSecondary"
+                onClick={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
+                title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme (Blue Effect)"}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                {theme === "dark" ? <Sun size={14} color="#f59e0b" /> : <Moon size={14} color="#6366f1" />}
+                <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+              </button>
               <button className="btn btnSecondary" onClick={loadData}>
                 <RefreshCw size={14} /> Refresh
               </button>
