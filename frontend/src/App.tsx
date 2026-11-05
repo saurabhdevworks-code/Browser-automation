@@ -67,6 +67,95 @@ type ChatMessage = {
   createdAt: string;
 };
 
+// Formatted Markdown renderer for Gemini-style clean typography
+function FormattedMarkdown({ content }: { content?: string }) {
+  if (!content) return null;
+
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let currentList: React.ReactNode[] = [];
+  let listKey = 0;
+
+  function flushList() {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul key={`ul-${listKey++}`} className="geminiMarkdownList">
+          {currentList}
+        </ul>
+      );
+      currentList = [];
+    }
+  }
+
+  function formatInline(text: string): React.ReactNode[] {
+    const tokens: React.ReactNode[] = [];
+    const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        tokens.push(text.slice(lastIndex, match.index));
+      }
+      const token = match[0];
+      if (token.startsWith("`") && token.endsWith("`")) {
+        tokens.push(
+          <code key={match.index} className="geminiMarkdownCode">
+            {token.slice(1, -1)}
+          </code>
+        );
+      } else if (token.startsWith("**") && token.endsWith("**")) {
+        tokens.push(
+          <strong key={match.index} className="geminiMarkdownBold">
+            {token.slice(2, -2)}
+          </strong>
+        );
+      } else if (token.startsWith("*") && token.endsWith("*")) {
+        tokens.push(
+          <em key={match.index} className="geminiMarkdownItalic">
+            {token.slice(1, -1)}
+          </em>
+        );
+      }
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      tokens.push(text.slice(lastIndex));
+    }
+
+    return tokens;
+  }
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    const bulletMatch = trimmed.match(/^(?:•|\-|\*)\s+(.*)$/);
+    if (bulletMatch) {
+      const itemContent = bulletMatch[1];
+      currentList.push(
+        <li key={`li-${idx}`} className="geminiMarkdownListItem">
+          {formatInline(itemContent)}
+        </li>
+      );
+    } else {
+      flushList();
+      if (trimmed === "") {
+        elements.push(<div key={`spacer-${idx}`} className="geminiMarkdownSpacer" />);
+      } else {
+        elements.push(
+          <p key={`p-${idx}`} className="geminiMarkdownParagraph">
+            {formatInline(trimmed)}
+          </p>
+        );
+      }
+    }
+  });
+
+  flushList();
+
+  return <div className="geminiFormattedMarkdown">{elements}</div>;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "connections" | "capabilities" | "social" | "approvals" | "files" | "security" | "settings">("dashboard");
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -1178,7 +1267,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                                   </div>
                                 </div>
                               ) : (
-                                <div className="geminiResponseText">{m.content}</div>
+                                <FormattedMarkdown content={m.content} />
                               )}
                             </div>
 
@@ -1247,9 +1336,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                           <div className="geminiAgentMessage">
                             <div className="geminiAgentBody">
                               <div className="geminiAgentPill">
-                                <div className="geminiResponseText">
-                                  {t.result || "Execution recorded. Observe-Plan-Act-Verify cycle processed for destination."}
-                                </div>
+                                <FormattedMarkdown content={t.result || "Execution recorded. Observe-Plan-Act-Verify cycle processed for destination."} />
                               </div>
 
                               {matchingFile && (
