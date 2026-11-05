@@ -38,7 +38,8 @@ import {
   Moon,
   Settings,
   EyeOff,
-  Cpu
+  Cpu,
+  Menu
 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
@@ -177,6 +178,8 @@ export default function App() {
   // Gemini AI Command Center state
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [conversationStarted, setConversationStarted] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [geminiPrompt, setGeminiPrompt] = useState("");
@@ -1104,60 +1107,206 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
 
   return (
     <div className={`shell ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brandIcon"><Bot size={22} /></div>
-          <div>
-            <b>Universal Agent</b>
-            <small>ENTERPRISE COMMAND</small>
-          </div>
+      {/* Sidebar (Gemini History Sidebar on Dashboard, Standard Nav on Other Tabs) */}
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""} ${activeTab === "dashboard" ? "geminiSidebarMode" : ""}`}>
+        {/* Top Header Row with Hamburger & New Chat */}
+        <div className="sidebarTopRow">
+          <button
+            type="button"
+            className="geminiHamburgerBtn"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <Menu size={20} />
+          </button>
+
+          {!sidebarCollapsed && activeTab === "dashboard" && (
+            <button
+              type="button"
+              className="geminiNewChatPillBtn"
+              onClick={() => {
+                setConversationStarted(false);
+                setChatMessages([]);
+                setGeminiPrompt("");
+                setSelectedTarget("");
+                setShowPlusMenu(false);
+                setActiveHistoryId(null);
+              }}
+            >
+              <Plus size={16} /> New chat
+            </button>
+          )}
+
+          {!sidebarCollapsed && activeTab !== "dashboard" && (
+            <div className="brand" style={{ padding: 0 }}>
+              <div className="brandIcon"><Bot size={20} /></div>
+              <div>
+                <b>Universal Agent</b>
+                <small>ENTERPRISE COMMAND</small>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="navLabel">CORE PLATFORM</div>
-        <a className={`nav ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => setActiveTab("dashboard")}>
-          <Activity size={18} /> Command Center
-        </a>
-        <a className={`nav ${activeTab === "connections" ? "active" : ""}`} onClick={() => setActiveTab("connections")}>
-          <Globe2 size={18} /> Connected Platforms
-          <span className="badge">{connections.length}</span>
-        </a>
-        <a className={`nav ${activeTab === "capabilities" ? "active" : ""}`} onClick={() => setActiveTab("capabilities")}>
-          <Layers size={18} /> Capability Matrix
-        </a>
+        {/* When in Dashboard Tab: Google Gemini-Style Recent History List */}
+        {activeTab === "dashboard" ? (
+          <div className="geminiSidebarHistory">
+            {!sidebarCollapsed ? (
+              <>
+                <div className="geminiHistoryLabel">Recent</div>
+                <div className="geminiHistoryScrollArea">
+                  {tasks.length === 0 ? (
+                    <div className="geminiHistoryEmpty">No past commands yet</div>
+                  ) : (
+                    tasks.slice(0, 40).map(t => (
+                      <div
+                        key={t.id}
+                        className={`geminiHistoryItem ${activeHistoryId === t.id ? "active" : ""}`}
+                        onClick={() => {
+                          setActiveHistoryId(t.id);
+                          const targetConn = connections.find(c => c.id === t.connectionId);
+                          const matchingFile = files.find(f => f.taskId === t.id || f.fileName.includes(t.id));
+                          setChatMessages([
+                            {
+                              id: "hist-u-" + t.id,
+                              role: "user",
+                              targetName: targetConn?.name || "",
+                              prompt: t.prompt,
+                              status: "COMPLETED",
+                              createdAt: t.createdAt
+                            },
+                            {
+                              id: "hist-a-" + t.id,
+                              role: "assistant",
+                              targetName: targetConn?.name || "",
+                              content: t.result || "Execution completed.",
+                              status: t.status === "FAILED" ? "FAILED" : "COMPLETED",
+                              file: matchingFile,
+                              createdAt: t.createdAt
+                            }
+                          ]);
+                          setConversationStarted(true);
+                        }}
+                        title={t.prompt}
+                      >
+                        <MessageSquare size={15} className="geminiHistoryIcon" />
+                        <span className="geminiHistoryText">{t.prompt}</span>
+                        <button
+                          type="button"
+                          className="geminiHistoryDeleteBtn"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setTasks(prev => prev.filter(item => item.id !== t.id));
+                          }}
+                          title="Remove from history"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="geminiCollapsedIcons">
+                <button
+                  type="button"
+                  className="geminiCollapsedIconBtn"
+                  title="New chat"
+                  onClick={() => {
+                    setConversationStarted(false);
+                    setChatMessages([]);
+                    setGeminiPrompt("");
+                    setSelectedTarget("");
+                    setShowPlusMenu(false);
+                    setActiveHistoryId(null);
+                  }}
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+            )}
 
-        <div className="navLabel">OMNICHANNEL & AUTOMATION</div>
-        <a className={`nav ${activeTab === "social" ? "active" : ""}`} onClick={() => setActiveTab("social")}>
-          <Share2 size={18} /> Social & WhatsApp
-        </a>
-        <a className={`nav ${activeTab === "approvals" ? "active" : ""}`} onClick={() => setActiveTab("approvals")}>
-          <ShieldCheck size={18} /> Approval Center
-          {pendingApprovalsCount > 0 && <span className="badge" style={{ background: "#ef4444" }}>{pendingApprovalsCount}</span>}
-        </a>
-        <a className={`nav ${activeTab === "files" ? "active" : ""}`} onClick={() => setActiveTab("files")}>
-          <FileSpreadsheet size={18} /> Generated Files
-          <span className="badge">{files.length}</span>
-        </a>
+            {/* Bottom Quick Navigation Links */}
+            <div className="geminiSidebarFooter">
+              <div
+                className="geminiSidebarFooterItem"
+                onClick={() => setActiveTab("connections")}
+                title="Connected Platforms"
+              >
+                <Globe2 size={16} />
+                {!sidebarCollapsed && <span>Connected Platforms</span>}
+                {!sidebarCollapsed && <span className="badge" style={{ marginLeft: "auto" }}>{connections.length}</span>}
+              </div>
 
-        <div className="navLabel">GOVERNANCE & CONFIGURATION</div>
-        <a className={`nav ${activeTab === "security" ? "active" : ""}`} onClick={() => setActiveTab("security")}>
-          <Lock size={18} /> Security & Audit
-        </a>
-        <a className={`nav ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
-          <Settings size={18} /> Settings & AI Keys
-          {aiStatus.isConfigured ? (
-            <span className="badge" style={{ background: "#10b981", color: "#fff" }}>Active</span>
-          ) : (
-            <span className="badge" style={{ background: "#f59e0b", color: "#0f172a" }}>Setup</span>
-          )}
-        </a>
+              <div
+                className="geminiSidebarFooterItem"
+                onClick={() => setActiveTab("settings")}
+                title="Settings & AI Keys"
+              >
+                <Settings size={16} />
+                {!sidebarCollapsed && <span>Settings & AI Keys</span>}
+                {!sidebarCollapsed && (
+                  aiStatus.isConfigured ? (
+                    <span className="badge" style={{ marginLeft: "auto", background: "#10b981", color: "#fff" }}>Active</span>
+                  ) : (
+                    <span className="badge" style={{ marginLeft: "auto", background: "#f59e0b", color: "#0f172a" }}>Setup</span>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Standard Navigation for Other Pages */
+          <div className="sidebarNavList">
+            <div className="navLabel">CORE PLATFORM</div>
+            <a className="nav" onClick={() => setActiveTab("dashboard")}>
+              <Activity size={18} /> Command Center
+            </a>
+            <a className={`nav ${activeTab === "connections" ? "active" : ""}`} onClick={() => setActiveTab("connections")}>
+              <Globe2 size={18} /> Connected Platforms
+              <span className="badge">{connections.length}</span>
+            </a>
+            <a className={`nav ${activeTab === "capabilities" ? "active" : ""}`} onClick={() => setActiveTab("capabilities")}>
+              <Layers size={18} /> Capability Matrix
+            </a>
+
+            <div className="navLabel">OMNICHANNEL & AUTOMATION</div>
+            <a className={`nav ${activeTab === "social" ? "active" : ""}`} onClick={() => setActiveTab("social")}>
+              <Share2 size={18} /> Social & WhatsApp
+            </a>
+            <a className={`nav ${activeTab === "approvals" ? "active" : ""}`} onClick={() => setActiveTab("approvals")}>
+              <ShieldCheck size={18} /> Approval Center
+              {pendingApprovalsCount > 0 && <span className="badge" style={{ background: "#ef4444" }}>{pendingApprovalsCount}</span>}
+            </a>
+            <a className={`nav ${activeTab === "files" ? "active" : ""}`} onClick={() => setActiveTab("files")}>
+              <FileSpreadsheet size={18} /> Generated Files
+              <span className="badge">{files.length}</span>
+            </a>
+
+            <div className="navLabel">GOVERNANCE & CONFIGURATION</div>
+            <a className={`nav ${activeTab === "security" ? "active" : ""}`} onClick={() => setActiveTab("security")}>
+              <Lock size={18} /> Security & Audit
+            </a>
+            <a className={`nav ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
+              <Settings size={18} /> Settings & AI Keys
+              {aiStatus.isConfigured ? (
+                <span className="badge" style={{ background: "#10b981", color: "#fff" }}>Active</span>
+              ) : (
+                <span className="badge" style={{ background: "#f59e0b", color: "#0f172a" }}>Setup</span>
+              )}
+            </a>
+          </div>
+        )}
 
         <div className="sideBottom">
           <ShieldCheck size={20} style={{ color: "#38bdf8" }} />
-          <div>
-            <b>AES-256-GCM Vault</b>
-            <small>Active SSRF & Sandbox Defense</small>
-          </div>
+          {!sidebarCollapsed && (
+            <div>
+              <b>AES-256-GCM Vault</b>
+              <small>Active SSRF & Sandbox Defense</small>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -1242,8 +1391,9 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
 
                 {/* Conversation Stream */}
                 <div className="geminiChatFeed">
-                  {chatMessages.length > 0 ? (
-                    chatMessages.map(m => {
+                  <div className="geminiChatFeedInner">
+                    {chatMessages.length > 0 ? (
+                      chatMessages.map(m => {
                       if (m.role === "user") {
                         return (
                           <div key={m.id} className="geminiUserMessage">
@@ -1401,12 +1551,15 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                       );
                     })
                   )}
-                  <div ref={chatFeedBottomRef} />
+                    <div ref={chatFeedBottomRef} />
+                  </div>
                 </div>
 
                 {/* Bottom Docked Input Capsule */}
                 <div className="geminiChatBottomCapsule">
-                  {renderGeminiInputCapsule()}
+                  <div className="geminiChatBottomCapsuleInner">
+                    {renderGeminiInputCapsule()}
+                  </div>
                 </div>
               </div>
             )}
