@@ -250,7 +250,7 @@ export default function App() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [conversationStarted, setConversationStarted] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [historyPanelOpen, setHistoryPanelOpen] = useState(true);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
@@ -1393,7 +1393,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
         {activeTab === "dashboard" && (
           <div className={`geminiScreenWrapper ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
             {/* Box 2 (Column 2): Gemini History Panel (Right next to Column 1 Main Sidebar) */}
-            {historyPanelOpen ? (
+            {historyPanelOpen && (
               <aside className="geminiHistoryPanel">
                 <div className="geminiHistoryPanelTop">
                   <button
@@ -1493,20 +1493,22 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                   )}
                 </div>
               </aside>
-            ) : (
-              /* Button to reopen Box 2 History Panel when collapsed */
-              <button
-                type="button"
-                className="geminiHistoryOpenBtn"
-                onClick={() => setHistoryPanelOpen(true)}
-                title="History"
-              >
-                <HistoryDocClockIcon size={18} />
-              </button>
             )}
 
             {/* Box 3 (Column 3): Main Canvas Area */}
             <div className="geminiMainCanvas">
+              {/* Prominent History Icon Button on Canvas (Visible when history panel is hidden) */}
+              {!historyPanelOpen && !conversationStarted && (
+                <button
+                  type="button"
+                  className="geminiHistoryOpenBtn"
+                  onClick={() => setHistoryPanelOpen(true)}
+                  title="Open Command History"
+                >
+                  <HistoryDocClockIcon size={20} />
+                </button>
+              )}
+
               {/* Theme Toggle Button (Top-Right) */}
               {renderThemeToggle(true)}
 

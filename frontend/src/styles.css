@@ -1474,33 +1474,41 @@ header.topBar p {
 }
 .geminiHistoryOpenBtn {
   position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 40;
-  width: 36px;
-  height: 36px;
+  top: 18px;
+  left: 20px;
+  z-index: 50;
+  width: 38px;
+  height: 38px;
   padding: 0;
   border-radius: 50%;
   background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 .geminiHistoryOpenBtn:hover {
-  background: rgba(30, 41, 59, 0.95);
-  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(30, 41, 59, 0.98);
+  border-color: rgba(96, 165, 250, 0.5);
   color: #60a5fa;
-  transform: scale(1.05);
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
 }
 .geminiScreenWrapper.lightTheme .geminiHistoryOpenBtn {
   background: #ffffff;
   border: 1px solid #cbd5e1;
-  color: #334155;
+  color: #475569;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.geminiScreenWrapper.lightTheme .geminiHistoryOpenBtn:hover {
+  background: #f8fafc;
+  border-color: #3b82f6;
+  color: #2563eb;
 }
 
 /* Box 3 (Column 3): Main Canvas Area */
