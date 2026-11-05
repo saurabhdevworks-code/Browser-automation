@@ -503,11 +503,20 @@ body {
   width: 38px;
   height: 38px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #0284c7, #2563eb);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+  flex-shrink: 0;
+}
+.brandLogoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
 }
 .brand b {
   display: block;

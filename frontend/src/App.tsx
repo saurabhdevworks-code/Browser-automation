@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import navioLogo from "./assets/navio-logo.png";
 import {
   Activity,
   Bot,
@@ -1298,7 +1299,9 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
       {/* Box 1 (Column 1): Core Platform Sidebar with ALL SaaS Features */}
       <aside className="sidebar">
         <div className="brand">
-          <div className="brandIcon"><Bot size={22} /></div>
+          <div className="brandIcon">
+            <img src={navioLogo} alt="Navio Logo" className="brandLogoImg" />
+          </div>
           <div>
             <b>Navio</b>
             <small>ENTERPRISE COMMAND</small>
