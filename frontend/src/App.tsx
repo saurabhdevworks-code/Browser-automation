@@ -1298,14 +1298,8 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
     <div className={`shell ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
       {/* Box 1 (Column 1): Core Platform Sidebar with ALL SaaS Features */}
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brandIcon">
-            <img src={navioLogo} alt="Navio Logo" className="brandLogoImg" />
-          </div>
-          <div>
-            <b>Navio</b>
-            <small>ENTERPRISE COMMAND</small>
-          </div>
+        <div className="brand" onClick={() => setActiveTab("dashboard")} style={{ cursor: "pointer" }} title="Navio">
+          <img src={navioLogo} alt="Navio" className="brandOnlyLogoImg" />
         </div>
 
         <div className="navLabel">CORE PLATFORM</div>
