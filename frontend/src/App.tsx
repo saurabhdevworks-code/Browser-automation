@@ -146,28 +146,50 @@ export default function App() {
       setAiApiKey(savedKey);
       setAiProvider(savedProvider);
       setAiModel(savedModel);
-    }
-
-    fetch(`${WORKER_API}/v1/config/ai`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.isConfigured) {
-          setAiStatus({ isConfigured: true, maskedKey: data.maskedKey });
-          if (!savedKey && data.maskedKey) {
-            setAiApiKey(data.maskedKey);
+      setAiStatus({
+        isConfigured: true,
+        maskedKey: savedKey.length > 8 ? `${savedKey.slice(0, 4)}...${savedKey.slice(-4)}` : "••••••••"
+      });
+      // Silently sync to backend worker runtime
+      fetch(`${WORKER_API}/v1/config/ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: savedProvider,
+          apiKey: savedKey,
+          model: savedModel,
+          skipTest: true
+        })
+      }).catch(() => {});
+    } else {
+      fetch(`${WORKER_API}/v1/config/ai`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.isConfigured) {
+            setAiStatus({ isConfigured: true, maskedKey: data.maskedKey });
+            if (data.provider) setAiProvider(data.provider);
+            if (data.model) setAiModel(data.model);
           }
-          if (data.provider) setAiProvider(data.provider);
-          if (data.model) setAiModel(data.model);
-        }
-      })
-      .catch(() => {});
+        })
+        .catch(() => {});
+    }
   }, []);
 
   async function handleSaveAiConfig() {
-    if (!aiApiKey.trim()) {
-      showToast("Please enter a valid API key.", "error");
+    const key = aiApiKey.trim();
+    if (!key) {
+      showToast("Please enter an API key.", "error");
       return;
     }
+
+    // Instantly persist in browser storage
+    localStorage.setItem("browser_agent_ai_key", key);
+    localStorage.setItem("browser_agent_ai_provider", aiProvider);
+    localStorage.setItem("browser_agent_ai_model", aiModel);
+
+    const masked = key.length > 8 ? `${key.slice(0, 4)}...${key.slice(-4)}` : "••••••••";
+    setAiStatus({ isConfigured: true, maskedKey: masked });
+
     setIsTestingAiKey(true);
     try {
       const res = await fetch(`${WORKER_API}/v1/config/ai`, {
@@ -175,23 +197,21 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: aiProvider,
-          apiKey: aiApiKey.trim(),
+          apiKey: key,
           model: aiModel
         })
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to validate API key with provider.");
+      if (data && data.config) {
+        setAiStatus({
+          isConfigured: true,
+          maskedKey: data.config.maskedKey || masked,
+          message: data.message
+        });
       }
-
-      localStorage.setItem("browser_agent_ai_key", aiApiKey.trim());
-      localStorage.setItem("browser_agent_ai_provider", aiProvider);
-      localStorage.setItem("browser_agent_ai_model", aiModel);
-
-      setAiStatus({ isConfigured: true, maskedKey: data.config?.maskedKey, message: data.message });
-      showToast(data.message || `Connected to ${aiProvider.toUpperCase()} successfully!`, "success");
+      showToast(data?.message || `Saved ${aiProvider.toUpperCase()} API key!`, data?.verified === false ? "info" : "success");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to connect AI API key.", "error");
+      showToast(`API Key saved locally! (Worker note: ${err instanceof Error ? err.message : "check worker connection"})`, "info");
     } finally {
       setIsTestingAiKey(false);
     }
@@ -203,6 +223,7 @@ export default function App() {
     localStorage.removeItem("browser_agent_ai_model");
     setAiApiKey("");
     setAiStatus({ isConfigured: false });
+    fetch(`${WORKER_API}/v1/config/ai`, { method: "DELETE" }).catch(() => {});
     showToast("AI Key cleared. System running in smart Heuristic Fallback mode.", "info");
   }
 

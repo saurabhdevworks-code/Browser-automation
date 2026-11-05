@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 export interface ActionStep {
   type: "navigate" | "fill" | "click" | "press" | "wait" | "extract" | "auto_login";
   selector?: string;
@@ -20,15 +23,46 @@ export interface AiRuntimeConfig {
   model: string;
 }
 
-let activeConfig: AiRuntimeConfig | null = null;
+const CONFIG_FILE = path.join(process.cwd(), ".ai-config.json");
+
+function loadPersistedConfig(): AiRuntimeConfig | null {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.apiKey) return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+let activeConfig: AiRuntimeConfig | null = loadPersistedConfig();
+if (activeConfig?.apiKey) {
+  if (activeConfig.provider === "groq") process.env.GROQ_API_KEY = activeConfig.apiKey;
+  if (activeConfig.provider === "gemini") process.env.GEMINI_API_KEY = activeConfig.apiKey;
+  if (activeConfig.provider === "openai") process.env.OPENAI_API_KEY = activeConfig.apiKey;
+  if (activeConfig.provider === "claude") process.env.ANTHROPIC_API_KEY = activeConfig.apiKey;
+}
 
 export function setRuntimeAiConfig(config: AiRuntimeConfig | null): void {
   activeConfig = config;
+  try {
+    if (config && config.apiKey) {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+    } else if (fs.existsSync(CONFIG_FILE)) {
+      fs.unlinkSync(CONFIG_FILE);
+    }
+  } catch {}
   if (config?.apiKey) {
     if (config.provider === "groq") process.env.GROQ_API_KEY = config.apiKey;
     if (config.provider === "gemini") process.env.GEMINI_API_KEY = config.apiKey;
     if (config.provider === "openai") process.env.OPENAI_API_KEY = config.apiKey;
     if (config.provider === "claude") process.env.ANTHROPIC_API_KEY = config.apiKey;
+  } else {
+    delete process.env.GROQ_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
   }
 }
 

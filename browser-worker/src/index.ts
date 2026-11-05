@@ -199,23 +199,47 @@ app.get("/v1/config/ai", (_req, res) => {
 });
 
 app.post("/v1/config/ai", async (req, res) => {
-  const { provider, apiKey, model } = req.body || {};
-  if (!apiKey || typeof apiKey !== "string") {
+  const { provider, apiKey, model, skipTest } = req.body || {};
+  if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
     return res.status(400).json({ error: "Missing or invalid API key" });
   }
 
   const validProvider = ["gemini", "openai", "claude", "groq"].includes(provider) ? provider : "gemini";
-  const testRes = await testAiConnection({ provider: validProvider, apiKey, model });
-  if (!testRes.success) {
-    return res.status(422).json({ error: testRes.message });
+  const cleanKey = apiKey.trim();
+  const cleanModel = typeof model === "string" ? model.trim() : "";
+
+  // Always save configuration immediately so credentials are never lost
+  setRuntimeAiConfig({ provider: validProvider, apiKey: cleanKey, model: cleanModel });
+
+  let testMessage = `Saved ${validProvider.toUpperCase()} configuration!`;
+  let isVerified = true;
+
+  if (!skipTest) {
+    try {
+      const testRes = await testAiConnection({ provider: validProvider, apiKey: cleanKey, model: cleanModel });
+      isVerified = testRes.success;
+      if (testRes.success) {
+        testMessage = testRes.message;
+      } else {
+        testMessage = `Saved! (Live test warning: ${testRes.message})`;
+      }
+    } catch (err) {
+      isVerified = false;
+      testMessage = `Saved! (Live test note: ${err instanceof Error ? err.message : "Validation skipped"})`;
+    }
   }
 
-  setRuntimeAiConfig({ provider: validProvider, apiKey, model });
   return res.json({
     success: true,
-    message: testRes.message,
+    verified: isVerified,
+    message: testMessage,
     config: getRuntimeAiConfig()
   });
+});
+
+app.delete("/v1/config/ai", (_req, res) => {
+  setRuntimeAiConfig(null);
+  return res.json({ success: true, message: "AI Configuration cleared", config: getRuntimeAiConfig() });
 });
 
 app.listen(port, "0.0.0.0", () => console.log(`Browser worker listening on ${port}`));
