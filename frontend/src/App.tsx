@@ -659,9 +659,9 @@ export default function App() {
         className={`themeTogglePillBtn ${isDashboard ? "geminiDashboardToggle" : ""}`}
         onClick={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
         title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme (Blue Effect)"}
+        aria-label={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme"}
       >
-        {theme === "dark" ? <Sun size={14} color="#f59e0b" /> : <Moon size={14} color="#6366f1" />}
-        <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+        {theme === "dark" ? <Sun size={17} color="#f59e0b" /> : <Moon size={17} color="#6366f1" />}
       </button>
     );
   }
@@ -898,9 +898,6 @@ export default function App() {
             </div>
             <div className="headerActions">
               {renderThemeToggle(false)}
-              <button className="btn btnSecondary" onClick={loadData}>
-                <RefreshCw size={14} /> Refresh
-              </button>
             </div>
           </header>
         )}
