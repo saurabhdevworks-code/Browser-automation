@@ -431,6 +431,42 @@ export default function App() {
     }
   }
 
+  async function handleDeleteTask(taskId: string) {
+    // Optimistic UI state cleanup
+    setTasks(prev => prev.filter(item => item.id !== taskId));
+    if (activeHistoryId === taskId) {
+      setActiveHistoryId(null);
+      setChatMessages([]);
+      setConversationStarted(false);
+    }
+    try {
+      const r = await fetch(`${API}/tasks/${taskId}`, { method: "DELETE" });
+      if (r.ok || r.status === 204) {
+        showToast("Command permanently deleted.", "info");
+      } else {
+        showToast("Command removed.", "info");
+      }
+    } catch (err) {
+      console.error("Hard delete task error:", err);
+      showToast("Command removed from view.", "info");
+    }
+  }
+
+  async function handleClearAllTasks() {
+    if (!window.confirm("Permanently delete all command history from database?")) return;
+    setTasks([]);
+    setActiveHistoryId(null);
+    setChatMessages([]);
+    setConversationStarted(false);
+    try {
+      await fetch(`${API}/tasks`, { method: "DELETE" });
+      showToast("All command history permanently deleted.", "info");
+    } catch (err) {
+      console.error("Hard delete all tasks error:", err);
+      showToast("History cleared.", "info");
+    }
+  }
+
   async function launchBrowserLogin(c: Connection) {
     setBusy(true);
     showToast(`Launching Chromium login window for ${c.name}...`, "info");
@@ -1237,7 +1273,19 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                   </button>
                 </div>
 
-                <div className="geminiHistoryLabel">Recent</div>
+                <div className="geminiHistoryLabel">
+                  <span>Recent</span>
+                  {tasks.length > 0 && (
+                    <button
+                      type="button"
+                      className="geminiHistoryClearAllBtn"
+                      onClick={handleClearAllTasks}
+                      title="Permanently delete all command history"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
                 <div className="geminiHistoryScrollArea">
                   {tasks.length === 0 ? (
                     <div className="geminiHistoryEmpty">No past commands yet</div>
@@ -1280,16 +1328,9 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                           className="geminiHistoryDeleteBtn"
                           onClick={e => {
                             e.stopPropagation();
-                            const taskId = t.id;
-                            setTasks(prev => prev.filter(item => item.id !== taskId));
-                            if (activeHistoryId === taskId) {
-                              setActiveHistoryId(null);
-                              setChatMessages([]);
-                              setConversationStarted(false);
-                            }
-                            showToast("Command removed from history.", "info");
+                            handleDeleteTask(t.id);
                           }}
-                          title="Delete from history"
+                          title="Permanently delete from database"
                         >
                           <Trash2 size={13} />
                         </button>

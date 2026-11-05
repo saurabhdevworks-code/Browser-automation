@@ -7,4 +7,5 @@ import java.util.UUID;
 public interface ApprovalRepository extends JpaRepository<ApprovalRequest, UUID> {
     List<ApprovalRequest> findByOrderByRequestedAtDesc();
     List<ApprovalRequest> findByApprovalStatusOrderByRequestedAtDesc(String status);
+    void deleteByTaskId(UUID taskId);
 }

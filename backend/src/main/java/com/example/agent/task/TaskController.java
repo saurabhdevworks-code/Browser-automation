@@ -1,11 +1,13 @@
 package com.example.agent.task;
 
+import com.example.agent.approval.ApprovalRepository;
 import com.example.agent.connection.*;
 import com.example.agent.file.FileRepository;
 import com.example.agent.file.GeneratedFile;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.http.*;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
 
@@ -17,13 +19,15 @@ public class TaskController {
     private final ConnectionRepository connections;
     private final WorkerClient worker;
     private final FileRepository files;
+    private final ApprovalRepository approvals;
 
-    public TaskController(TaskRepository t, ActionRepository a, ConnectionRepository c, WorkerClient w, FileRepository f) {
+    public TaskController(TaskRepository t, ActionRepository a, ConnectionRepository c, WorkerClient w, FileRepository f, ApprovalRepository app) {
         this.tasks = t;
         this.actions = a;
         this.connections = c;
         this.worker = w;
         this.files = f;
+        this.approvals = app;
     }
 
     public record CreateTask(@NotNull UUID connectionId, @NotBlank @Size(max=2000) String prompt) {}
@@ -145,5 +149,28 @@ public class TaskController {
         task.update("CANCELLED", task.getResult(), null);
         actions.save(new AgentAction(task.getId(), "TASK_CANCELLATION", "Task cancelled by user instruction", "CANCELLED"));
         return tasks.save(task);
+    }
+
+    @DeleteMapping("/{id}")
+    @Transactional
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        if (!tasks.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        actions.deleteByTaskId(id);
+        files.deleteByTaskId(id);
+        approvals.deleteByTaskId(id);
+        tasks.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping
+    @Transactional
+    public ResponseEntity<Void> deleteAll() {
+        actions.deleteAll();
+        files.deleteAll();
+        approvals.deleteAll();
+        tasks.deleteAll();
+        return ResponseEntity.noContent().build();
     }
 }

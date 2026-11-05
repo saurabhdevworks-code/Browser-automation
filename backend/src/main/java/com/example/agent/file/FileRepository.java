@@ -6,4 +6,6 @@ import java.util.UUID;
 
 public interface FileRepository extends JpaRepository<GeneratedFile, UUID> {
     List<GeneratedFile> findByOrderByCreatedAtDesc();
+    List<GeneratedFile> findByTaskId(UUID taskId);
+    void deleteByTaskId(UUID taskId);
 }
