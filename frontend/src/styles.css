@@ -1112,33 +1112,62 @@ header.topBar p {
   background: transparent;
 }
 
-/* Theme Toggle Button */
+/* Unified Global Theme Toggle Button for ALL pages */
+.themeTogglePillBtn,
+.geminiThemeToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+  height: 34px;
+  box-sizing: border-box;
+}
+
+.themeTogglePillBtn.geminiDashboardToggle,
 .geminiThemeToggleBtn {
   position: absolute;
   top: 16px;
   right: 20px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  color: inherit;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(8px);
   z-index: 50;
 }
+
+/* Light Mode Pill */
+.shell.lightTheme .themeTogglePillBtn,
+.shell.lightTheme .geminiThemeToggleBtn,
 .geminiScreenWrapper.lightTheme .geminiThemeToggleBtn {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
-.geminiThemeToggleBtn:hover {
+.shell.lightTheme .themeTogglePillBtn:hover,
+.shell.lightTheme .geminiThemeToggleBtn:hover {
   transform: scale(1.04);
+  border-color: #0284c7;
+  color: #0284c7;
+}
+
+/* Dark Mode Pill with Blue Ambient Glow */
+.shell.darkTheme .themeTogglePillBtn,
+.shell.darkTheme .geminiThemeToggleBtn,
+.geminiScreenWrapper.darkTheme .geminiThemeToggleBtn {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #f8fafc;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 12px rgba(37, 99, 235, 0.2);
+}
+.shell.darkTheme .themeTogglePillBtn:hover,
+.shell.darkTheme .geminiThemeToggleBtn:hover {
+  transform: scale(1.04);
+  border-color: #60a5fa;
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.35);
+  color: #ffffff;
 }
 
 /* Center Stage (Initial Homepage - Image 2) */

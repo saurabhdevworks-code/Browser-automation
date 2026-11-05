@@ -652,6 +652,20 @@ export default function App() {
     }
   }
 
+  function renderThemeToggle(isDashboard = false) {
+    return (
+      <button
+        type="button"
+        className={`themeTogglePillBtn ${isDashboard ? "geminiDashboardToggle" : ""}`}
+        onClick={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
+        title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme (Blue Effect)"}
+      >
+        {theme === "dark" ? <Sun size={14} color="#f59e0b" /> : <Moon size={14} color="#6366f1" />}
+        <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+      </button>
+    );
+  }
+
   function renderGeminiInputCapsule() {
     return (
       <div className="geminiPillCapsule">
@@ -883,16 +897,7 @@ export default function App() {
               <p>One AI Agent. One Command Interface. Natural-Language Digital Execution.</p>
             </div>
             <div className="headerActions">
-              <button
-                type="button"
-                className="btn btnSecondary"
-                onClick={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
-                title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme (Blue Effect)"}
-                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-              >
-                {theme === "dark" ? <Sun size={14} color="#f59e0b" /> : <Moon size={14} color="#6366f1" />}
-                <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
-              </button>
+              {renderThemeToggle(false)}
               <button className="btn btnSecondary" onClick={loadData}>
                 <RefreshCw size={14} /> Refresh
               </button>
@@ -920,16 +925,8 @@ export default function App() {
         {/* TAB 1: DASHBOARD (GEMINI COMMAND CENTER - DARK / LIGHT THEME) */}
         {activeTab === "dashboard" && (
           <div className={`geminiScreenWrapper ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
-            {/* Theme Toggle Button (Dark with Blue Effect / Light) */}
-            <button
-              type="button"
-              className="geminiThemeToggleBtn"
-              onClick={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
-              title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme (Blue Effect)"}
-            >
-              {theme === "dark" ? <Sun size={14} color="#f59e0b" /> : <Moon size={14} color="#6366f1" />}
-              <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
-            </button>
+            {/* Theme Toggle Button (Identical across all pages) */}
+            {renderThemeToggle(true)}
 
             {!conversationStarted ? (
               /* CENTER STAGE (Initial Homepage - Image 2) */
