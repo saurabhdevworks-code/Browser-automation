@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Activity,
   Bot,
@@ -25,7 +25,14 @@ import {
   Check,
   Key,
   Info,
-  Trash2
+  Trash2,
+  AtSign,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  CornerDownLeft,
+  X
 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
@@ -36,7 +43,7 @@ type Action = { id: string; actionType: string; description: string; status: str
 type Capability = { key: string; name: string; status: string; riskLevel: string; description: string };
 type Connector = { id: string; name: string; category: string; authType: string; status: string; capabilities: Capability[] };
 type Approval = { id: string; platform: string; actionDescription: string; riskLevel: string; approvalStatus: string; payload: string; consequences: string; requestedAt: string };
-type GeneratedFile = { id: string; fileName: string; fileType: string; rowCount: number; contentPreview: string; downloadUrl: string; createdAt: string };
+type GeneratedFile = { id: string; taskId?: string; fileName: string; fileType: string; rowCount: number; contentPreview: string; downloadUrl: string; createdAt: string };
 type WhatsAppChat = { id: string; customerName: string; phone: string; lastMessage: string; intent: string; confidence: string; suggestedDraft: string; status: string };
 type Toast = { id: string; type: "success" | "error" | "info"; message: string };
 
@@ -49,6 +56,18 @@ export default function App() {
   const [files, setFiles] = useState<GeneratedFile[]>([]);
   const [waChats, setWaChats] = useState<WhatsAppChat[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // Gemini AI Command Center state
+  const [geminiPrompt, setGeminiPrompt] = useState("");
+  const [selectedTarget, setSelectedTarget] = useState<string>("all"); // "all" or connection.id
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [quickConnName, setQuickConnName] = useState("");
+  const [quickConnUrl, setQuickConnUrl] = useState("");
+  const [expandedTraceTaskId, setExpandedTraceTaskId] = useState<string | null>(null);
+  const [taskTraceCache, setTaskTraceCache] = useState<Record<string, Action[]>>({});
+  const geminiTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   function showToast(message: string, type: "success" | "error" | "info" = "info") {
     const id = Math.random().toString(36).substring(2, 9);
@@ -295,6 +314,177 @@ export default function App() {
     }
   }
 
+  // Quick Add website from Gemini Command Center
+  async function handleQuickAddConnection(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!quickConnName.trim() || !quickConnUrl.trim()) {
+      showToast("Please provide both a Name and URL for the website.", "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch(`${API}/connections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: quickConnName.trim(), websiteUrl: quickConnUrl.trim() })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Failed to add website connection");
+      setQuickConnName("");
+      setQuickConnUrl("");
+      setShowQuickAddModal(false);
+      setShowMentionDropdown(false);
+      setSelectedTarget(data.id);
+      setSelectedConnId(data.id);
+      await loadData();
+      showToast(`Website "${data.name}" registered & targeted!`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Connection failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Handle typing in the Gemini prompt textarea with @ mention trigger
+  function handleGeminiPromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value;
+    setGeminiPrompt(val);
+
+    const cursorPos = e.target.selectionStart;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+    if (lastAtIndex !== -1 && (lastAtIndex === 0 || /\s/.test(textBeforeCursor[lastAtIndex - 1]))) {
+      const query = textBeforeCursor.slice(lastAtIndex + 1);
+      if (!/\s/.test(query)) {
+        setMentionFilter(query.toLowerCase());
+        setShowMentionDropdown(true);
+        return;
+      }
+    }
+    setShowMentionDropdown(false);
+  }
+
+  function selectMentionTarget(targetId: string, targetLabel: string) {
+    setSelectedTarget(targetId);
+    setShowMentionDropdown(false);
+
+    // Replace the trailing @query with @targetLabel
+    const lastAtIndex = geminiPrompt.lastIndexOf("@");
+    if (lastAtIndex !== -1) {
+      const prefix = geminiPrompt.slice(0, lastAtIndex);
+      const afterAt = geminiPrompt.slice(lastAtIndex);
+      const spaceIdx = afterAt.indexOf(" ");
+      const suffix = spaceIdx !== -1 ? afterAt.slice(spaceIdx) : " ";
+      setGeminiPrompt(`${prefix}@${targetLabel}${suffix}`);
+    } else {
+      setGeminiPrompt(prev => `@${targetLabel} ${prev}`.trim() + " ");
+    }
+    geminiTextareaRef.current?.focus();
+  }
+
+  async function toggleTaskTrace(taskId: string) {
+    if (expandedTraceTaskId === taskId) {
+      setExpandedTraceTaskId(null);
+      return;
+    }
+    setExpandedTraceTaskId(taskId);
+    if (!taskTraceCache[taskId]) {
+      try {
+        const r = await fetch(`${API}/tasks/${taskId}`);
+        if (r.ok) {
+          const detail = await r.json();
+          setTaskTraceCache(prev => ({ ...prev, [taskId]: detail.actions || [] }));
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Execute Gemini natural language command
+  async function handleExecuteGeminiCommand(customPrompt?: string, targetOverride?: string) {
+    const rawPrompt = (customPrompt || geminiPrompt).trim();
+    if (!rawPrompt) {
+      showToast("Please enter an instruction or prompt.", "error");
+      return;
+    }
+
+    // Determine target: check query for @all or @websiteName, or targetOverride, or selectedTarget
+    let resolvedTarget = targetOverride || selectedTarget;
+
+    if (/@all\b/i.test(rawPrompt)) {
+      resolvedTarget = "all";
+    } else {
+      // Check if prompt matches any connection name like @Canva
+      for (const conn of connections) {
+        const pattern = new RegExp(`@${conn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+        if (pattern.test(rawPrompt)) {
+          resolvedTarget = conn.id;
+          break;
+        }
+      }
+    }
+
+    if (resolvedTarget === "all") {
+      if (connections.length === 0) {
+        showToast("No websites connected yet. Register a website to begin.", "info");
+        setShowQuickAddModal(true);
+        return;
+      }
+      setBusy(true);
+      showToast(`Executing across all ${connections.length} connected platforms...`, "info");
+      try {
+        const cleanPrompt = rawPrompt.replace(/@all\s*/gi, "").trim() || rawPrompt;
+        for (const conn of connections) {
+          await fetch(`${API}/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ connectionId: conn.id, prompt: cleanPrompt })
+          });
+        }
+        setGeminiPrompt("");
+        await loadData();
+        showToast(`All ${connections.length} tasks executed successfully.`, "success");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Execution failed", "error");
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      // Single connection execution
+      let targetConn = connections.find(c => c.id === resolvedTarget);
+      if (!targetConn && connections.length > 0) {
+        targetConn = connections[0];
+      }
+      if (!targetConn) {
+        showToast("No target website available. Please connect a website first.", "error");
+        setShowQuickAddModal(true);
+        return;
+      }
+
+      setBusy(true);
+      showToast(`Agent executing Observe-Plan-Act-Verify on ${targetConn.name}...`, "info");
+      try {
+        const regex = new RegExp(`@${targetConn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*`, "gi");
+        const cleanPrompt = rawPrompt.replace(regex, "").trim() || rawPrompt;
+
+        const r = await fetch(`${API}/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ connectionId: targetConn.id, prompt: cleanPrompt })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Task execution failed");
+        setGeminiPrompt("");
+        await loadData();
+        await viewTaskDetail(data.id);
+        showToast(`Task execution on ${targetConn.name} ${data.status.toLowerCase()}.`, data.status === "COMPLETED" ? "success" : "error");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Task execution failed", "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+  }
+
   async function viewTaskDetail(id: string) {
     try {
       const r = await fetch(`${API}/tasks/${id}`);
@@ -439,207 +629,499 @@ export default function App() {
         ))}
       </div>
 
-        {/* TAB 1: DASHBOARD */}
+        {/* TAB 1: DASHBOARD (GEMINI COMMAND CENTER) */}
         {activeTab === "dashboard" && (
-          <>
-            <div className="statsGrid">
-              <div className="statCard">
-                <span>Authorized Connections</span>
-                <strong>{connections.length}</strong>
-                <small>Websites & SaaS Portals</small>
+          <div className="geminiWrapper">
+            {/* Gemini Hero Section */}
+            <div className="geminiHero">
+              <div className="geminiSparkleLogo">
+                <Sparkles size={28} />
               </div>
-              <div className="statCard">
-                <span>Tasks Executed</span>
-                <strong>{tasks.length}</strong>
-                <small>Total Observe-Act Cycles</small>
+              <h1 className="geminiTitle">AI Command Center</h1>
+              <p className="geminiSubtitle">
+                One AI Agent. One Command Interface. Natural-Language Digital Execution.
+              </p>
+            </div>
+
+            {/* Quick Metrics Ribbon */}
+            <div className="geminiRibbon">
+              <div className="geminiRibbonItem">
+                <Globe2 size={14} color="#0284c7" />
+                <span>Authorized Websites: <b>{connections.length}</b></span>
               </div>
-              <div className="statCard">
-                <span>Pending Approvals</span>
-                <strong style={{ color: pendingApprovalsCount > 0 ? "#ef4444" : "inherit" }}>
-                  {pendingApprovalsCount}
-                </strong>
-                <small>High/Medium Risk Checks</small>
+              <div className="geminiRibbonItem">
+                <Activity size={14} color="#8b5cf6" />
+                <span>Agent Cycles: <b>{tasks.length}</b></span>
               </div>
-              <div className="statCard">
-                <span>Generated Files</span>
-                <strong>{files.length}</strong>
-                <small>CSV & Excel Reports</small>
+              <div className="geminiRibbonItem">
+                <ShieldCheck size={14} color={pendingApprovalsCount > 0 ? "#ef4444" : "#10b981"} />
+                <span>Approvals: <b>{pendingApprovalsCount}</b></span>
+              </div>
+              <div className="geminiRibbonItem">
+                <FileSpreadsheet size={14} color="#059669" />
+                <span>Reports Generated: <b>{files.length}</b></span>
               </div>
             </div>
 
-            <div className="gridTwo">
-              {/* Task Launcher */}
-              <div className="panel">
-                <div className="panelHead">
-                  <div>
-                    <h2>Submit Natural-Language Task</h2>
-                    <p>Describe what you want done. The agent plans, navigates, and verifies.</p>
-                  </div>
-                </div>
-
-                <form onSubmit={handleRunTask} className="formGroup">
-                  <label>
-                    Target Connection
-                    <select value={selectedConnId} onChange={e => setSelectedConnId(e.target.value)} required>
-                      <option value="">-- Choose an authorized destination --</option>
-                      {connections.map(c => (
-                        <option value={c.id} key={c.id}>{c.name} ({c.websiteUrl})</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    Natural-Language Instruction
-                    <textarea
-                      value={taskPrompt}
-                      onChange={e => setTaskPrompt(e.target.value)}
-                      placeholder="e.g. Inspect the home portal, extract the primary navigation links and visible page content, and prepare an export."
-                      required
-                    />
-                  </label>
-
-                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <button className="btn btnPrimary" type="submit" disabled={busy || !connections.length}>
-                      {busy ? "Agent Executing..." : "Execute Task"} <ArrowUpRight size={16} />
-                    </button>
-                    {!connections.length && (
-                      <span style={{ fontSize: "12px", color: "#64748b" }}>Please add a connection first.</span>
+            {/* Gemini Command Input Capsule */}
+            <div className="geminiInputContainer">
+              {/* Target & Scope Indicator Bar */}
+              <div className="geminiTargetPillBar">
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className={`geminiActivePill ${selectedTarget === "all" ? "isAll" : ""}`}>
+                    {selectedTarget === "all" ? (
+                      <>
+                        <Globe2 size={13} />
+                        <span>Scope: <b>@all</b> (All Connected Platforms)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={13} />
+                        <span>Scope: <b>@{connections.find(c => c.id === selectedTarget)?.name || "Selected Website"}</b></span>
+                      </>
                     )}
-                  </div>
-                </form>
-              </div>
-
-              {/* Quick Website Registration */}
-              <div className="panel">
-                <div className="panelHead">
-                  <div>
-                    <h2>Connect Website / Admin Panel</h2>
-                    <p>Register any authorized custom portal, CRM, or ERP dashboard.</p>
-                  </div>
-                </div>
-
-                <form onSubmit={handleAddConnection} className="formGroup">
-                  <label>
-                    Connection Name
-                    <input
-                      value={newConnName}
-                      onChange={e => setNewConnName(e.target.value)}
-                      placeholder="e.g. Acme ERP Portal"
-                      required
-                      maxLength={160}
-                    />
-                  </label>
-                  <label>
-                    Website / Portal URL
-                    <input
-                      type="url"
-                      value={newConnUrl}
-                      onChange={e => setNewConnUrl(e.target.value)}
-                      placeholder="https://example.com"
-                      required
-                    />
-                  </label>
-                  <button className="btn btnSecondary" type="submit" disabled={busy}>
-                    <Plus size={16} /> Register Connection
+                  </span>
+                  <button
+                    className="geminiChangeTargetBtn"
+                    type="button"
+                    onClick={() => setShowMentionDropdown(prev => !prev)}
+                  >
+                    <AtSign size={12} style={{ display: "inline", verticalAlign: "middle" }} /> Change Target
                   </button>
-                </form>
-
-                <div className="connectionList">
-                  {connections.slice(0, 3).map(c => (
-                    <div className="connItem" key={c.id}>
-                      <div className="connIcon"><Globe2 size={18} /></div>
-                      <div className="connMeta">
-                        <b>{c.name}</b>
-                        <small>{c.websiteUrl}</small>
-                      </div>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                        <span className={`tag ${c.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`}>{c.status}</span>
-                        {c.status !== "AUTHENTICATED" && (
-                          <button
-                            className="btn btnSecondary"
-                            style={{ height: "26px", fontSize: "10px", padding: "0 8px" }}
-                            onClick={() => launchBrowserLogin(c)}
-                            title="Launch visible browser to log in"
-                          >
-                            <Key size={11} /> Login
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              </div>
-            </div>
 
-            {/* Live Task Execution Timeline / History */}
-            <div className="panel">
-              <div className="panelHead">
-                <div>
-                  <h2>Recent Execution Traces & Action Timelines</h2>
-                  <p>Step-by-step Observe-Plan-Act-Verify audit history.</p>
-                </div>
+                <button
+                  className="geminiChangeTargetBtn"
+                  type="button"
+                  onClick={() => setShowQuickAddModal(true)}
+                >
+                  <Plus size={12} style={{ display: "inline", verticalAlign: "middle" }} /> Connect Website
+                </button>
               </div>
 
-              {tasks.length === 0 ? (
-                <div style={{ color: "#94a3b8", fontSize: "13px", padding: "16px 0" }}>No tasks executed yet. Submit an instruction above to begin.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {tasks.slice(0, 5).map(t => (
-                    <div key={t.id} style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "12px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <b style={{ fontSize: "14px" }}>{t.prompt}</b>
-                          <small style={{ display: "block", color: "#64748b", marginTop: "2px" }}>
-                            {new Date(t.createdAt).toLocaleString()}
-                          </small>
+              {/* @ Mention Popup Menu */}
+              {showMentionDropdown && (
+                <div className="geminiMentionMenu">
+                  <div className="geminiMentionHead">
+                    <span>MENTION PLATFORM OR SELECT SCOPE</span>
+                    <button
+                      type="button"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+                      onClick={() => setShowMentionDropdown(false)}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="geminiMentionList">
+                    {/* Option: @all */}
+                    <div
+                      className={`geminiMentionItem ${selectedTarget === "all" ? "active" : ""}`}
+                      onClick={() => selectMentionTarget("all", "all")}
+                    >
+                      <div className="geminiMentionLeft">
+                        <div className="geminiMentionIcon allIcon">
+                          <Globe2 size={16} />
                         </div>
-                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                          <span className={`tag ${t.status === "COMPLETED" ? "tagGreen" : t.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
-                            {t.status}
+                        <div className="geminiMentionMeta">
+                          <b>@all</b>
+                          <small>Execute prompt across all registered websites simultaneously</small>
+                        </div>
+                      </div>
+                      <span className="tag tagGreen">Broadcast</span>
+                    </div>
+
+                    {/* Filtered connections */}
+                    {connections
+                      .filter(c => !mentionFilter || c.name.toLowerCase().includes(mentionFilter) || c.websiteUrl.toLowerCase().includes(mentionFilter))
+                      .map(c => (
+                        <div
+                          key={c.id}
+                          className={`geminiMentionItem ${selectedTarget === c.id ? "active" : ""}`}
+                          onClick={() => selectMentionTarget(c.id, c.name)}
+                        >
+                          <div className="geminiMentionLeft">
+                            <div className="geminiMentionIcon">
+                              <Bot size={16} />
+                            </div>
+                            <div className="geminiMentionMeta">
+                              <b>@{c.name}</b>
+                              <small>{c.websiteUrl}</small>
+                            </div>
+                          </div>
+                          <span className={`tag ${c.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`}>
+                            {c.status}
                           </span>
-                          <button className="actionIconBtn" title="View Step-by-Step Execution Trace" onClick={() => viewTaskDetail(t.id)}>
-                            <Eye size={15} />
-                          </button>
+                        </div>
+                      ))}
+
+                    {/* Quick Add Connection Item inside Mention Menu */}
+                    <div
+                      className="geminiMentionItem"
+                      onClick={() => {
+                        setShowMentionDropdown(false);
+                        setShowQuickAddModal(true);
+                      }}
+                    >
+                      <div className="geminiMentionLeft">
+                        <div className="geminiMentionIcon addIcon">
+                          <Plus size={16} />
+                        </div>
+                        <div className="geminiMentionMeta">
+                          <b>+ Connect New Website...</b>
+                          <small>Register a portal or web app on the fly</small>
                         </div>
                       </div>
-                      {t.result && (
-                        <p style={{ margin: "8px 0 0", fontSize: "12px", color: "#334155", background: "#f8fafc", padding: "8px 12px", borderRadius: "6px" }}>
-                          {t.result}
-                        </p>
-                      )}
+                      <span className="tag tagAmber">New</span>
                     </div>
-                  ))}
+                  </div>
                 </div>
               )}
+
+              {/* Textarea Input */}
+              <textarea
+                ref={geminiTextareaRef}
+                className="geminiTextarea"
+                rows={2}
+                value={geminiPrompt}
+                onChange={handleGeminiPromptChange}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!busy && geminiPrompt.trim()) {
+                      void handleExecuteGeminiCommand();
+                    }
+                  } else if (e.key === "Escape") {
+                    setShowMentionDropdown(false);
+                  }
+                }}
+                placeholder={
+                  connections.length === 0
+                    ? "Connect a website first using @ or button, then ask to inspect, extract or automate..."
+                    : "Ask anything or type @ to mention a website (e.g. @all inspect navigation and export CSV)..."
+                }
+              />
+
+              {/* Input Action Bar */}
+              <div className="geminiInputBottomBar">
+                <div className="geminiInputButtons">
+                  <button
+                    type="button"
+                    className="geminiToolPill highlight"
+                    onClick={() => setShowMentionDropdown(prev => !prev)}
+                    title="Mention a specific website or @all"
+                  >
+                    <AtSign size={13} />
+                    <span>Mention Platform</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="geminiToolPill"
+                    onClick={() => setShowQuickAddModal(true)}
+                    title="Connect a new website or CRM portal"
+                  >
+                    <Plus size={13} />
+                    <span>Connect Website</span>
+                  </button>
+                  <span className="geminiHintText">
+                    <CornerDownLeft size={11} /> Enter to run
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="geminiSendBtn"
+                  disabled={busy || !geminiPrompt.trim()}
+                  onClick={() => handleExecuteGeminiCommand()}
+                  title="Execute Natural Language Instruction"
+                >
+                  {busy ? <RefreshCw className="spin" size={18} /> : <Sparkles size={18} />}
+                </button>
+              </div>
             </div>
 
-            {/* Task Detail Modal / View */}
-            {selectedTaskDetail && (
-              <div className="panel" style={{ marginTop: "20px", border: "2px solid #0284c7" }}>
-                <div className="panelHead">
-                  <div>
-                    <h2>Execution Audit Trace: {selectedTaskDetail.task.prompt}</h2>
-                    <p>Status: {selectedTaskDetail.task.status}</p>
-                  </div>
-                  <button className="btn btnSecondary" onClick={() => setSelectedTaskDetail(null)}><XCircle size={16} /></button>
+            {/* Quick Suggestion Cards */}
+            <div style={{ marginTop: "4px" }}>
+              <div className="geminiSuggestionsHeader">
+                <Sparkles size={13} color="#8b5cf6" />
+                <span>Suggested Automation Prompts</span>
+              </div>
+              <div className="geminiSuggestionsGrid">
+                <div
+                  className="geminiSuggestionCard"
+                  onClick={() => {
+                    setSelectedTarget("all");
+                    setGeminiPrompt("@all Inspect portal homepage, extract all navigation links and export CSV report");
+                    geminiTextareaRef.current?.focus();
+                  }}
+                >
+                  <div className="sugTarget"><Globe2 size={11} /> @all</div>
+                  <div className="sugText">Inspect all connected websites and extract navigation links into CSV report.</div>
                 </div>
-                <div className="timeline">
-                  {selectedTaskDetail.actions.map(act => (
-                    <div className="timelineStep" key={act.id}>
-                      <div className={`stepDot ${act.status.toLowerCase()}`}>
-                        {act.status === "COMPLETED" ? <Check size={14} /> : <Activity size={14} />}
-                      </div>
-                      <div className="stepContent">
-                        <b>{act.actionType}</b>
-                        <p>{act.description}</p>
-                        <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
-                      </div>
+
+                <div
+                  className="geminiSuggestionCard"
+                  onClick={() => {
+                    const first = connections[0];
+                    if (first) {
+                      setSelectedTarget(first.id);
+                      setGeminiPrompt(`@${first.name} Extract visible DOM hierarchy, interactive buttons and page summary`);
+                    } else {
+                      setSelectedTarget("all");
+                      setGeminiPrompt("@all Extract visible DOM hierarchy, interactive buttons and page summary");
+                    }
+                    geminiTextareaRef.current?.focus();
+                  }}
+                >
+                  <div className="sugTarget"><Bot size={11} /> @{connections[0]?.name || "website"}</div>
+                  <div className="sugText">Extract DOM structure, interactive anchors and page summary.</div>
+                </div>
+
+                <div
+                  className="geminiSuggestionCard"
+                  onClick={() => {
+                    setSelectedTarget("all");
+                    setGeminiPrompt("@all Run automated health check and verify website responsiveness");
+                    geminiTextareaRef.current?.focus();
+                  }}
+                >
+                  <div className="sugTarget"><Activity size={11} /> @all</div>
+                  <div className="sugText">Run automated health check and verify responsive rendering across all sites.</div>
+                </div>
+
+                <div
+                  className="geminiSuggestionCard"
+                  onClick={() => {
+                    const target = connections[1] || connections[0];
+                    if (target) {
+                      setSelectedTarget(target.id);
+                      setGeminiPrompt(`@${target.name} Audit page security headers, SSL status and form inputs`);
+                    } else {
+                      setSelectedTarget("all");
+                      setGeminiPrompt("@all Audit page security headers, SSL status and form inputs");
+                    }
+                    geminiTextareaRef.current?.focus();
+                  }}
+                >
+                  <div className="sugTarget"><ShieldCheck size={11} /> @{connections[1]?.name || connections[0]?.name || "security"}</div>
+                  <div className="sugText">Audit security headers, SSL status, forms and input safety.</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Connect Website Modal */}
+            {showQuickAddModal && (
+              <div className="modalOverlay" onClick={() => setShowQuickAddModal(false)}>
+                <div className="modalBox" onClick={e => e.stopPropagation()}>
+                  <div className="modalHead">
+                    <div>
+                      <h3>Connect Website or Web App</h3>
+                      <p>Register any authorized custom portal, CRM, or SaaS dashboard.</p>
                     </div>
-                  ))}
+                    <button
+                      type="button"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+                      onClick={() => setShowQuickAddModal(false)}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleQuickAddConnection} className="formGroup">
+                    <label>
+                      Connection Name
+                      <input
+                        value={quickConnName}
+                        onChange={e => setQuickConnName(e.target.value)}
+                        placeholder="e.g. Canva Workspace, Shopify Admin, Acme ERP"
+                        required
+                        maxLength={160}
+                        autoFocus
+                      />
+                    </label>
+                    <label>
+                      Website / Portal URL
+                      <input
+                        type="url"
+                        value={quickConnUrl}
+                        onChange={e => setQuickConnUrl(e.target.value)}
+                        placeholder="https://example.com"
+                        required
+                      />
+                    </label>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
+                      <button
+                        type="button"
+                        className="btn btnSecondary"
+                        onClick={() => setShowQuickAddModal(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn btnPrimary" disabled={busy}>
+                        {busy ? "Connecting..." : "Connect & Target"}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}
-          </>
+
+            {/* Conversational Stream: Recent Executions & Agent Responses */}
+            <div className="geminiStream">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-muted)", margin: 0, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                  Agent Activity & Execution Stream
+                </h3>
+                {tasks.length > 0 && (
+                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                    Showing latest {Math.min(tasks.length, 10)} task(s)
+                  </span>
+                )}
+              </div>
+
+              {tasks.length === 0 ? (
+                <div className="panel" style={{ textAlign: "center", padding: "40px 20px" }}>
+                  <Sparkles size={36} color="#8b5cf6" style={{ margin: "0 auto 12px", display: "block" }} />
+                  <h4 style={{ margin: "0 0 6px", fontFamily: "var(--font-heading)" }}>No instructions executed yet</h4>
+                  <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
+                    Type a prompt above or pick a suggestion to launch an Observe-Plan-Act-Verify browser cycle.
+                  </p>
+                </div>
+              ) : (
+                tasks.slice(0, 10).map(t => {
+                  const targetConn = connections.find(c => c.id === t.connectionId);
+                  const matchingFile = files.find(f => f.taskId === t.id || f.fileName.includes(t.id));
+                  const isTraceExpanded = expandedTraceTaskId === t.id;
+                  const traceActions = taskTraceCache[t.id] || [];
+
+                  return (
+                    <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {/* User Query Bubble */}
+                      <div className="geminiUserMessage">
+                        <div className="geminiUserBubble">
+                          <div className="geminiUserBubbleHead">
+                            <span className="geminiTargetTag">
+                              {targetConn ? `@${targetConn.name}` : "@platform"}
+                            </span>
+                            <small style={{ fontSize: "10px", color: "#64748b" }}>
+                              {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </small>
+                          </div>
+                          <p className="geminiUserText">{t.prompt}</p>
+                        </div>
+                      </div>
+
+                      {/* Gemini Agent Response Card */}
+                      <div className="geminiAgentMessage">
+                        <div className="geminiAgentAvatar">
+                          <Sparkles size={18} />
+                        </div>
+                        <div className="geminiAgentBubble">
+                          <div className="geminiAgentHead">
+                            <div className="geminiAgentTitle">
+                              <Bot size={15} color="#6366f1" />
+                              <span>Universal Agent</span>
+                              <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "12px" }}>
+                                • {targetConn?.name || "Target Site"}
+                              </span>
+                            </div>
+                            <span className={`tag ${t.status === "COMPLETED" ? "tagGreen" : t.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
+                              {t.status}
+                            </span>
+                          </div>
+
+                          {/* Observability Pipeline: Observe -> Plan -> Act -> Verify */}
+                          <div className="geminiPipeline">
+                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                              <Eye size={11} /> Observe
+                            </div>
+                            <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
+                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                              <Workflow size={11} /> Plan
+                            </div>
+                            <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
+                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                              <Bot size={11} /> Act
+                            </div>
+                            <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
+                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : ""}`}>
+                              <ShieldCheck size={11} /> Verify
+                            </div>
+                          </div>
+
+                          {/* Result Text */}
+                          {t.result ? (
+                            <div className="geminiResultBox">{t.result}</div>
+                          ) : (
+                            <div className="geminiResultBox" style={{ color: "#64748b" }}>
+                              Execution recorded. Observe-Plan-Act-Verify cycle processed for destination.
+                            </div>
+                          )}
+
+                          {/* Generated File Link (if any) */}
+                          {matchingFile && (
+                            <div className="geminiGeneratedFileBadge">
+                              <div className="geminiFileLeft">
+                                <FileSpreadsheet size={18} color="#16a34a" />
+                                <div>
+                                  <b>{matchingFile.fileName}</b>
+                                  <small style={{ display: "block" }}>{matchingFile.rowCount} records extracted</small>
+                                </div>
+                              </div>
+                              <a
+                                href={`${API}/files/${matchingFile.id}/download`}
+                                className="btn btnSecondary"
+                                style={{ height: "28px", padding: "0 10px", fontSize: "11px", gap: "4px" }}
+                                download
+                              >
+                                <Download size={13} /> Download CSV
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Trace Action Row */}
+                          <div className="geminiActionRow">
+                            <button
+                              type="button"
+                              className="geminiTraceBtn"
+                              onClick={() => toggleTaskTrace(t.id)}
+                            >
+                              <Activity size={12} />
+                              <span>{isTraceExpanded ? "Hide Execution Trace" : "View Step-by-Step Trace"}</span>
+                              {isTraceExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            </button>
+                          </div>
+
+                          {/* Expandable Trace Timeline */}
+                          {isTraceExpanded && (
+                            <div className="timeline" style={{ marginTop: "14px", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
+                              {traceActions.length === 0 ? (
+                                <div style={{ fontSize: "12px", color: "#94a3b8", padding: "6px 0" }}>
+                                  Loading detailed step trace...
+                                </div>
+                              ) : (
+                                traceActions.map(act => (
+                                  <div className="timelineStep" key={act.id}>
+                                    <div className={`stepDot ${act.status.toLowerCase()}`}>
+                                      {act.status === "COMPLETED" ? <Check size={13} /> : <Activity size={13} />}
+                                    </div>
+                                    <div className="stepContent">
+                                      <b style={{ fontSize: "12px" }}>{act.actionType}</b>
+                                      <p style={{ fontSize: "12px", margin: "2px 0" }}>{act.description}</p>
+                                      <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         )}
 
         {/* TAB 2: CONNECTED PLATFORMS */}
