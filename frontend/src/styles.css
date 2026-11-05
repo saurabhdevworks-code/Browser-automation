@@ -1523,7 +1523,37 @@ header.topBar p {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 12px 4px;
+  padding: 12px 14px 12px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+/* Right-side Dark Theme Scrollbar */
+.geminiChatFeed::-webkit-scrollbar {
+  width: 6px;
+}
+.geminiChatFeed::-webkit-scrollbar-track {
+  background: transparent;
+}
+.geminiChatFeed::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+.geminiChatFeed::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+}
+.geminiScreenWrapper.darkTheme .geminiChatFeed::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+}
+.geminiScreenWrapper.darkTheme .geminiChatFeed::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+}
+.geminiScreenWrapper.lightTheme .geminiChatFeed::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+}
+.geminiScreenWrapper.lightTheme .geminiChatFeed::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
 }
 .geminiChatBottomCapsule {
   position: sticky;
@@ -1605,36 +1635,16 @@ header.topBar p {
   box-shadow: none;
 }
 
-/* AI Agent Response (Google Gemini Style - Direct Typography & Sparkle Avatar) */
+/* AI Agent Response (Google Gemini Style - Clean Left-Aligned Pill Box without Avatar) */
 .geminiAgentMessage {
   display: flex;
-  gap: 14px;
-  align-items: flex-start;
+  justify-content: flex-start;
   width: 100%;
-  margin-bottom: 24px;
-}
-.geminiAgentAvatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: transparent;
-  color: #8ab4f8;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.geminiScreenWrapper.darkTheme .geminiAgentAvatar {
-  color: #8ab4f8;
-  filter: drop-shadow(0 0 6px rgba(138, 180, 248, 0.5));
-}
-.geminiScreenWrapper.lightTheme .geminiAgentAvatar {
-  color: #1a73e8;
+  margin-bottom: 20px;
 }
 
 .geminiAgentBody {
-  flex: 1;
-  min-width: 0;
+  max-width: 80%;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1649,7 +1659,6 @@ header.topBar p {
   padding: 10px 20px;
   font-size: 15px;
   line-height: 1.6;
-  max-width: 80%;
   width: fit-content;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(148, 163, 184, 0.12);
@@ -1679,13 +1688,14 @@ header.topBar p {
 .geminiThinkingWrapper {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 0;
+  justify-content: center;
+  padding: 4px 6px;
+  min-height: 20px;
 }
 .geminiGeminiDots {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 .geminiDot {
   width: 8px;

@@ -650,14 +650,40 @@ export default function App() {
     // If NO target platform was specified (User just typed "hy", asked a question, or general query)
     if (!resolvedTarget) {
       const isGreeting = /^(hi|hy|hello|hey|hola|namaste|yo|good\s*(morning|evening|afternoon)|who\s*are\s*you|what\s*can\s*you\s*do|help)\b/i.test(rawPrompt);
-      setTimeout(() => {
-        setChatMessages(prev => prev.map(m => {
-          if (m.id === assistMsgId) {
-            if (isGreeting) {
-              return {
-                ...m,
-                status: "COMPLETED",
-                content: `Hello! I am your Universal Browser AI Agent.
+      const isNameQuery = /what(?:'s|\s+is)\s+my\s+name|who\s+am\s+i/i.test(rawPrompt);
+
+      (async () => {
+        try {
+          const res = await fetch(`${WORKER_API}/v1/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: rawPrompt })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.reply) {
+              await new Promise(r => setTimeout(r, 650));
+              setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "COMPLETED", content: data.reply } : m));
+              return;
+            }
+          }
+        } catch (_) {}
+
+        setTimeout(() => {
+          setChatMessages(prev => prev.map(m => {
+            if (m.id === assistMsgId) {
+              if (isNameQuery) {
+                return {
+                  ...m,
+                  status: "COMPLETED",
+                  content: "Your name is Saurabh Patel."
+                };
+              }
+              if (isGreeting) {
+                return {
+                  ...m,
+                  status: "COMPLETED",
+                  content: `Hello Saurabh! I am your Universal Browser AI Agent.
 
 I can automate web actions, navigate portals, auto-fill credentials, and extract data.
 
@@ -665,8 +691,8 @@ I can automate web actions, navigate portals, auto-fill credentials, and extract
 • **Target a specific website:** Type \`@<name> <task>\` (e.g. \`@canva open designs\`) or click \`+\` to pick a platform.
 • **Broadcast to all websites:** Type \`@all <task>\` to run across all registered portals simultaneously.
 • **Direct URL:** Mention any URL (e.g. \`https://google.com search developer jobs\`).`
-              };
-            } else {
+                };
+              }
               return {
                 ...m,
                 status: "COMPLETED",
@@ -678,10 +704,10 @@ ${connections.length > 0 ? connections.map(c => `• **@${c.name}** (${c.website
 You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast across all platforms.`
               };
             }
-          }
-          return m;
-        }));
-      }, 400);
+            return m;
+          }));
+        }, 850);
+      })();
       return;
     }
 
@@ -1141,9 +1167,6 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
 
                       return (
                         <div key={m.id} className="geminiAgentMessage">
-                          <div className="geminiAgentAvatar">
-                            <Sparkles size={20} />
-                          </div>
                           <div className="geminiAgentBody">
                             <div className="geminiAgentPill">
                               {m.status === "THINKING" ? (
@@ -1153,7 +1176,6 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                                     <span className="geminiDot dot2" />
                                     <span className="geminiDot dot3" />
                                   </div>
-                                  <span className="geminiThinkingText">{m.content || "Thinking..."}</span>
                                 </div>
                               ) : (
                                 <div className="geminiResponseText">{m.content}</div>
@@ -1223,9 +1245,6 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
 
                           {/* Agent Response */}
                           <div className="geminiAgentMessage">
-                            <div className="geminiAgentAvatar">
-                              <Sparkles size={20} />
-                            </div>
                             <div className="geminiAgentBody">
                               <div className="geminiAgentPill">
                                 <div className="geminiResponseText">

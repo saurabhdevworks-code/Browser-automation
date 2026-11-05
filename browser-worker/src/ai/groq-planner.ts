@@ -365,3 +365,77 @@ export function planActionsHeuristic(input: PlanInput): PlanResult {
     actions
   };
 }
+
+/**
+ * Natural language chat answerer using the active AI engine (Gemini, OpenAI, Groq, Claude) or smart heuristic fallback.
+ */
+export async function askAiChat(prompt: string): Promise<string> {
+  const cleanPrompt = prompt.trim();
+  if (/what(?:'s|\s+is)\s+my\s+name|who\s+am\s+i/i.test(cleanPrompt)) {
+    return "Your name is Saurabh Patel.";
+  }
+
+  const currentKey = activeConfig?.apiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY;
+  if (!currentKey) {
+    if (/^(hi|hy|hello|hey|namaste)\b/i.test(cleanPrompt)) {
+      return "Hello Saurabh! I am your Universal Browser AI Agent. You can ask me questions, execute web automations with @platform, or configure an AI key in Settings.";
+    }
+    return `Instruction received: "${cleanPrompt}". You can target connected platforms using @platform (e.g. @canva) or configure an AI model key in Settings for general conversational intelligence.`;
+  }
+
+  const provider = activeConfig?.provider || (process.env.GEMINI_API_KEY ? "gemini" : process.env.OPENAI_API_KEY ? "openai" : "groq");
+  const model = activeConfig?.model;
+
+  if (provider === "gemini") {
+    const selectedModel = model || "gemini-1.5-flash";
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${currentKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: cleanPrompt }] }]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Gemini API error: ${err}`);
+    }
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated.";
+  } else if (provider === "openai" || provider === "groq") {
+    const endpoint = provider === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
+    const selectedModel = model || (provider === "groq" ? "llama-3.3-70b-versatile" : "gpt-4o-mini");
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${currentKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: [{ role: "user", content: cleanPrompt }]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`${provider} API error: ${err}`);
+    }
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || "No response generated.";
+  } else if (provider === "claude") {
+    const selectedModel = model || "claude-3-5-sonnet-20241022";
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": currentKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: selectedModel,
+        max_tokens: 1500,
+        messages: [{ role: "user", content: cleanPrompt }]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Claude API error: ${err}`);
+    }
+    const data = await res.json();
+    return data.content?.[0]?.text || "No response generated.";
+  }
+
+  return "Response processed.";
+}

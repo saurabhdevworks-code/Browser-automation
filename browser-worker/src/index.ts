@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertSafeHttpUrl } from "./security/url-policy.js";
-import { planActions, setRuntimeAiConfig, getRuntimeAiConfig, testAiConnection } from "./ai/groq-planner.js";
+import { planActions, setRuntimeAiConfig, getRuntimeAiConfig, testAiConnection, askAiChat } from "./ai/groq-planner.js";
 import { executePlan } from "./executor/action-executor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -240,6 +240,19 @@ app.post("/v1/config/ai", async (req, res) => {
 app.delete("/v1/config/ai", (_req, res) => {
   setRuntimeAiConfig(null);
   return res.json({ success: true, message: "AI Configuration cleared", config: getRuntimeAiConfig() });
+});
+
+app.post("/v1/chat", async (req, res) => {
+  const { prompt } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({ error: "Missing prompt" });
+  }
+  try {
+    const reply = await askAiChat(prompt.trim());
+    return res.json({ success: true, reply });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Chat processing failed" });
+  }
 });
 
 app.listen(port, "0.0.0.0", () => console.log(`Browser worker listening on ${port}`));
