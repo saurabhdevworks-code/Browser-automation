@@ -796,7 +796,7 @@ header.topBar p {
 }
 
 /* ========================================================
-   GEMINI AI COMMAND CENTER - WHITE THEME (IMAGE 1 & 2 SPEC)
+   GEMINI AI COMMAND CENTER - THEMES (LIGHT & DARK BLUE EFFECT)
    ======================================================== */
 .geminiScreenWrapper {
   flex: 1;
@@ -804,7 +804,130 @@ header.topBar p {
   flex-direction: column;
   width: 100%;
   height: 100%;
+  position: relative;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.geminiScreenWrapper.lightTheme {
   background: #ffffff;
+  color: #0f172a;
+}
+
+/* Gemini Dark Theme with Deep Midnight Blue Ambient Aura (Image 2 style) */
+.geminiScreenWrapper.darkTheme {
+  background: radial-gradient(ellipse at 50% 32%, #0e2042 0%, #071126 48%, #030611 100%);
+  color: #f8fafc;
+}
+.geminiScreenWrapper.darkTheme .geminiStartTitle {
+  color: #f8fafc;
+  text-shadow: 0 0 35px rgba(59, 130, 246, 0.25);
+}
+.geminiScreenWrapper.darkTheme .geminiPillCapsule {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(12px);
+  border-color: rgba(59, 130, 246, 0.2);
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.5), 0 0 24px rgba(37, 99, 235, 0.12);
+}
+.geminiScreenWrapper.darkTheme .geminiPillCapsule:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3), 0 0 32px rgba(37, 99, 235, 0.25);
+}
+.geminiScreenWrapper.darkTheme .geminiCapsuleInput {
+  color: #f8fafc;
+}
+.geminiScreenWrapper.darkTheme .geminiCapsuleInput::placeholder {
+  color: #64748b;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusCircleBtn {
+  background: rgba(30, 41, 59, 0.8);
+  color: #94a3b8;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusCircleBtn:hover {
+  background: #334155;
+  color: #ffffff;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuDropdown {
+  background: #0f172a;
+  border-color: #1e293b;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 24px rgba(37, 99, 235, 0.18);
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuItem:hover {
+  background: #1e293b;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuItem b {
+  color: #f8fafc;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuDivider {
+  background: #1e293b;
+}
+.geminiScreenWrapper.darkTheme .geminiChatTopBar {
+  border-bottom-color: rgba(59, 130, 246, 0.15);
+}
+.geminiScreenWrapper.darkTheme .geminiChatTitle b {
+  color: #f8fafc;
+}
+.geminiScreenWrapper.darkTheme .geminiUserBubble {
+  background: #1e293b;
+  border-color: #334155;
+}
+.geminiScreenWrapper.darkTheme .geminiUserText {
+  color: #f8fafc;
+}
+.geminiScreenWrapper.darkTheme .geminiAgentBubble {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px);
+  border-color: rgba(59, 130, 246, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+.geminiScreenWrapper.darkTheme .geminiAgentTitle {
+  color: #f8fafc;
+}
+.geminiScreenWrapper.darkTheme .geminiResultBox {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-left-color: #818cf8;
+}
+.geminiScreenWrapper.darkTheme .geminiPipeStep {
+  background: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+.geminiScreenWrapper.darkTheme .geminiPipeStep.done {
+  background: #064e3b;
+  border-color: #059669;
+  color: #6ee7b7;
+}
+.geminiScreenWrapper.darkTheme .geminiChatBottomCapsule {
+  background: transparent;
+}
+
+/* Theme Toggle Button */
+.geminiThemeToggleBtn {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: inherit;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+  z-index: 50;
+}
+.geminiScreenWrapper.lightTheme .geminiThemeToggleBtn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+.geminiThemeToggleBtn:hover {
+  transform: scale(1.04);
 }
 
 /* Center Stage (Initial Homepage - Image 2) */
@@ -1045,6 +1168,50 @@ header.topBar p {
   padding-top: 10px;
   z-index: 10;
   flex-shrink: 0;
+}
+
+/* Thinking Shimmer & Schedule Badges */
+.geminiThinkingBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #6366f1;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 0;
+}
+.geminiShimmerWave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.geminiShimmerDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  animation: geminiDotBounce 1.4s ease-in-out infinite both;
+}
+.geminiShimmerDot:nth-child(1) { animation-delay: -0.32s; }
+.geminiShimmerDot:nth-child(2) { animation-delay: -0.16s; }
+.geminiShimmerDot:nth-child(3) { animation-delay: 0s; }
+@keyframes geminiDotBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1.1); opacity: 1; }
+}
+
+.geminiScheduleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 4px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
 }
 
 /* Chat Stream */

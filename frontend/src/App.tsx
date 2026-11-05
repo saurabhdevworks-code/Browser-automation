@@ -32,7 +32,10 @@ import {
   ChevronUp,
   Zap,
   CornerDownLeft,
-  X
+  X,
+  Clock,
+  Sun,
+  Moon
 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
@@ -46,6 +49,19 @@ type Approval = { id: string; platform: string; actionDescription: string; riskL
 type GeneratedFile = { id: string; taskId?: string; fileName: string; fileType: string; rowCount: number; contentPreview: string; downloadUrl: string; createdAt: string };
 type WhatsAppChat = { id: string; customerName: string; phone: string; lastMessage: string; intent: string; confidence: string; suggestedDraft: string; status: string };
 type Toast = { id: string; type: "success" | "error" | "info"; message: string };
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  targetName: string;
+  prompt?: string;
+  content?: string;
+  isSchedule?: boolean;
+  scheduleDetails?: string;
+  status: "THINKING" | "RUNNING" | "COMPLETED" | "FAILED";
+  actions?: Action[];
+  file?: GeneratedFile;
+  createdAt: string;
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "connections" | "capabilities" | "social" | "approvals" | "files" | "security">("dashboard");
@@ -58,7 +74,9 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Gemini AI Command Center state
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [conversationStarted, setConversationStarted] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [geminiPrompt, setGeminiPrompt] = useState("");
   const [selectedTarget, setSelectedTarget] = useState<string>("all"); // "all" or connection.id
@@ -71,6 +89,14 @@ export default function App() {
   const [taskTraceCache, setTaskTraceCache] = useState<Record<string, Action[]>>({});
   const geminiTextareaRef = useRef<HTMLTextAreaElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
+  const chatFeedBottomRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll chat feed to bottom when new messages arrive
+  useEffect(() => {
+    if (conversationStarted && chatFeedBottomRef.current) {
+      chatFeedBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, conversationStarted]);
 
   // Close plus popover menu when clicking outside
   useEffect(() => {
@@ -448,10 +474,6 @@ export default function App() {
       return;
     }
 
-    setConversationStarted(true);
-    setShowPlusMenu(false);
-    setShowMentionDropdown(false);
-
     // Determine target: check query for @all or @websiteName, or targetOverride, or selectedTarget
     let resolvedTarget = targetOverride || selectedTarget;
 
@@ -468,10 +490,45 @@ export default function App() {
       }
     }
 
+    const isScheduleReq = /\b(schedule|recurring|every|daily|weekly|hourly|cron)\b/i.test(rawPrompt);
+    const userMsgId = "user-" + Date.now();
+    const assistMsgId = "asst-" + Date.now();
+    const targetLabel = resolvedTarget === "all" ? "all" : (connections.find(c => c.id === resolvedTarget)?.name || "target");
+
+    setConversationStarted(true);
+    setShowPlusMenu(false);
+    setShowMentionDropdown(false);
+
+    const newUserMsg: ChatMessage = {
+      id: userMsgId,
+      role: "user",
+      targetName: targetLabel,
+      prompt: rawPrompt,
+      status: "COMPLETED",
+      createdAt: new Date().toISOString()
+    };
+
+    const newAssistMsg: ChatMessage = {
+      id: assistMsgId,
+      role: "assistant",
+      targetName: targetLabel,
+      isSchedule: isScheduleReq,
+      scheduleDetails: isScheduleReq ? "Recurring schedule registered for execution cycle." : undefined,
+      status: "THINKING",
+      content: isScheduleReq
+        ? "Configuring recurring automation schedule and initializing browser verification..."
+        : "Observing browser context, verifying URL safety policies, and executing automation plan...",
+      createdAt: new Date().toISOString()
+    };
+
+    setChatMessages(prev => [...prev, newUserMsg, newAssistMsg]);
+    setGeminiPrompt("");
+
     if (resolvedTarget === "all") {
       if (connections.length === 0) {
         showToast("No websites connected yet. Register a website to begin.", "info");
         setShowQuickAddModal(true);
+        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: "No websites connected yet. Please add a website connection." } : m));
         return;
       }
       setBusy(true);
@@ -485,10 +542,31 @@ export default function App() {
             body: JSON.stringify({ connectionId: conn.id, prompt: cleanPrompt })
           });
         }
-        setGeminiPrompt("");
         await loadData();
+        setChatMessages(prev => prev.map(m => {
+          if (m.id === assistMsgId) {
+            return {
+              ...m,
+              status: "COMPLETED",
+              content: isScheduleReq
+                ? `Automation scheduled across all ${connections.length} registered platforms. The agent will run recurring inspections on each portal.`
+                : `Executed Observe-Plan-Act-Verify cycle across all ${connections.length} registered platforms. Navigation links and DOM records updated.`
+            };
+          }
+          return m;
+        }));
         showToast(`All ${connections.length} tasks executed successfully.`, "success");
       } catch (err) {
+        setChatMessages(prev => prev.map(m => {
+          if (m.id === assistMsgId) {
+            return {
+              ...m,
+              status: "FAILED",
+              content: err instanceof Error ? err.message : "Multi-target execution failed"
+            };
+          }
+          return m;
+        }));
         showToast(err instanceof Error ? err.message : "Execution failed", "error");
       } finally {
         setBusy(false);
@@ -502,6 +580,7 @@ export default function App() {
       if (!targetConn) {
         showToast("No target website available. Please connect a website first.", "error");
         setShowQuickAddModal(true);
+        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: "No target website available. Please connect a website first." } : m));
         return;
       }
 
@@ -518,11 +597,54 @@ export default function App() {
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || "Task execution failed");
-        setGeminiPrompt("");
+
         await loadData();
-        await viewTaskDetail(data.id);
+
+        let latestFile: GeneratedFile | undefined;
+        let taskActions: Action[] = [];
+        try {
+          const detailRes = await fetch(`${API}/tasks/${data.id}`);
+          if (detailRes.ok) {
+            const detail = await detailRes.json();
+            taskActions = detail.actions || [];
+          }
+          const fileRes = await fetch(`${API}/files`);
+          if (fileRes.ok) {
+            const filesData: GeneratedFile[] = await fileRes.json();
+            setFiles(filesData);
+            latestFile = filesData.find(f => f.taskId === data.id || f.fileName.includes(data.id));
+          }
+        } catch (_) {}
+
+        const replyContent = data.result || (isScheduleReq
+          ? `Automation scheduled successfully on ${targetConn.name}. The browser agent will observe, navigate, and verify the portal on cadence.`
+          : `Page inspection completed successfully for ${targetConn.name}. Visual DOM elements and safe navigation links were verified.`);
+
+        setChatMessages(prev => prev.map(m => {
+          if (m.id === assistMsgId) {
+            return {
+              ...m,
+              status: data.status,
+              content: replyContent,
+              actions: taskActions,
+              file: latestFile
+            };
+          }
+          return m;
+        }));
+
         showToast(`Task execution on ${targetConn.name} ${data.status.toLowerCase()}.`, data.status === "COMPLETED" ? "success" : "error");
       } catch (err) {
+        setChatMessages(prev => prev.map(m => {
+          if (m.id === assistMsgId) {
+            return {
+              ...m,
+              status: "FAILED",
+              content: err instanceof Error ? err.message : "Task execution failed"
+            };
+          }
+          return m;
+        }));
         showToast(err instanceof Error ? err.message : "Task execution failed", "error");
       } finally {
         setBusy(false);
@@ -785,9 +907,20 @@ export default function App() {
         ))}
       </div>
 
-        {/* TAB 1: DASHBOARD (GEMINI COMMAND CENTER - WHITE THEME) */}
+        {/* TAB 1: DASHBOARD (GEMINI COMMAND CENTER - DARK / LIGHT THEME) */}
         {activeTab === "dashboard" && (
-          <div className="geminiScreenWrapper">
+          <div className={`geminiScreenWrapper ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
+            {/* Theme Toggle Button (Dark with Blue Effect / Light) */}
+            <button
+              type="button"
+              className="geminiThemeToggleBtn"
+              onClick={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
+              title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme (Blue Effect)"}
+            >
+              {theme === "dark" ? <Sun size={14} color="#f59e0b" /> : <Moon size={14} color="#6366f1" />}
+              <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+            </button>
+
             {!conversationStarted ? (
               /* CENTER STAGE (Initial Homepage - Image 2) */
               <div className="geminiCenterStage">
@@ -822,31 +955,26 @@ export default function App() {
 
                 {/* Conversation Stream */}
                 <div className="geminiChatFeed">
-                  {tasks.slice(0, 10).map(t => {
-                    const targetConn = connections.find(c => c.id === t.connectionId);
-                    const matchingFile = files.find(f => f.taskId === t.id || f.fileName.includes(t.id));
-                    const isTraceExpanded = expandedTraceTaskId === t.id;
-                    const traceActions = taskTraceCache[t.id] || [];
-
-                    return (
-                      <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                        {/* User Prompt */}
-                        <div className="geminiUserMessage">
-                          <div className="geminiUserBubble">
-                            <div className="geminiUserBubbleHead">
-                              <span className="geminiTargetTag">
-                                {targetConn ? `@${targetConn.name}` : "@platform"}
-                              </span>
-                              <small style={{ fontSize: "10px", color: "#64748b" }}>
-                                {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </small>
+                  {chatMessages.length > 0 ? (
+                    chatMessages.map(m => {
+                      if (m.role === "user") {
+                        return (
+                          <div key={m.id} className="geminiUserMessage">
+                            <div className="geminiUserBubble">
+                              <div className="geminiUserBubbleHead">
+                                <span className="geminiTargetTag">@{m.targetName}</span>
+                                <small style={{ fontSize: "10px", color: "#64748b" }}>
+                                  {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </small>
+                              </div>
+                              <p className="geminiUserText">{m.prompt}</p>
                             </div>
-                            <p className="geminiUserText">{t.prompt}</p>
                           </div>
-                        </div>
+                        );
+                      }
 
-                        {/* Agent Response */}
-                        <div className="geminiAgentMessage">
+                      return (
+                        <div key={m.id} className="geminiAgentMessage">
                           <div className="geminiAgentAvatar">
                             <Sparkles size={18} />
                           </div>
@@ -856,52 +984,63 @@ export default function App() {
                                 <Bot size={15} color="#6366f1" />
                                 <span>Universal Agent</span>
                                 <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "12px" }}>
-                                  • {targetConn?.name || "Target Site"}
+                                  • {m.targetName}
                                 </span>
                               </div>
-                              <span className={`tag ${t.status === "COMPLETED" ? "tagGreen" : t.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
-                                {t.status}
+                              <span className={`tag ${m.status === "COMPLETED" ? "tagGreen" : m.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
+                                {m.status}
                               </span>
                             </div>
 
+                            {m.isSchedule && (
+                              <div className="geminiScheduleBadge">
+                                <Clock size={12} /> Recurring Schedule Active ({m.scheduleDetails || "Daily execution"})
+                              </div>
+                            )}
+
                             {/* Observe-Plan-Act-Verify Pipeline */}
                             <div className="geminiPipeline">
-                              <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                              <div className={`geminiPipeStep ${m.status === "COMPLETED" ? "done" : m.status === "THINKING" ? "running" : ""}`}>
                                 <Eye size={11} /> Observe
                               </div>
                               <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                              <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                              <div className={`geminiPipeStep ${m.status === "COMPLETED" ? "done" : m.status === "THINKING" ? "running" : ""}`}>
                                 <Workflow size={11} /> Plan
                               </div>
                               <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                              <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                              <div className={`geminiPipeStep ${m.status === "COMPLETED" ? "done" : ""}`}>
                                 <Bot size={11} /> Act
                               </div>
                               <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                              <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : ""}`}>
+                              <div className={`geminiPipeStep ${m.status === "COMPLETED" ? "done" : ""}`}>
                                 <ShieldCheck size={11} /> Verify
                               </div>
                             </div>
 
-                            {t.result ? (
-                              <div className="geminiResultBox">{t.result}</div>
-                            ) : (
-                              <div className="geminiResultBox" style={{ color: "#64748b" }}>
-                                Execution recorded. Observe-Plan-Act-Verify cycle processed for destination.
+                            {m.status === "THINKING" ? (
+                              <div className="geminiThinkingBox">
+                                <div className="geminiShimmerWave">
+                                  <span className="geminiShimmerDot" />
+                                  <span className="geminiShimmerDot" />
+                                  <span className="geminiShimmerDot" />
+                                </div>
+                                <span>{m.content}</span>
                               </div>
+                            ) : (
+                              <div className="geminiResultBox">{m.content}</div>
                             )}
 
-                            {matchingFile && (
+                            {m.file && (
                               <div className="geminiGeneratedFileBadge">
                                 <div className="geminiFileLeft">
                                   <FileSpreadsheet size={18} color="#16a34a" />
                                   <div>
-                                    <b>{matchingFile.fileName}</b>
-                                    <small style={{ display: "block" }}>{matchingFile.rowCount} records extracted</small>
+                                    <b>{m.file.fileName}</b>
+                                    <small style={{ display: "block" }}>{m.file.rowCount} records extracted</small>
                                   </div>
                                 </div>
                                 <a
-                                  href={`${API}/files/${matchingFile.id}/download`}
+                                  href={`${API}/files/${m.file.id}/download`}
                                   className="btn btnSecondary"
                                   style={{ height: "28px", padding: "0 10px", fontSize: "11px", gap: "4px" }}
                                   download
@@ -911,45 +1050,157 @@ export default function App() {
                               </div>
                             )}
 
-                            <div className="geminiActionRow">
-                              <button
-                                type="button"
-                                className="geminiTraceBtn"
-                                onClick={() => toggleTaskTrace(t.id)}
-                              >
-                                <Activity size={12} />
-                                <span>{isTraceExpanded ? "Hide Execution Trace" : "View Step-by-Step Trace"}</span>
-                                {isTraceExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                              </button>
-                            </div>
-
-                            {isTraceExpanded && (
-                              <div className="timeline" style={{ marginTop: "14px", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
-                                {traceActions.length === 0 ? (
-                                  <div style={{ fontSize: "12px", color: "#94a3b8", padding: "6px 0" }}>
-                                    Loading detailed step trace...
-                                  </div>
-                                ) : (
-                                  traceActions.map(act => (
-                                    <div className="timelineStep" key={act.id}>
-                                      <div className={`stepDot ${act.status.toLowerCase()}`}>
-                                        {act.status === "COMPLETED" ? <Check size={13} /> : <Activity size={13} />}
-                                      </div>
-                                      <div className="stepContent">
-                                        <b style={{ fontSize: "12px" }}>{act.actionType}</b>
-                                        <p style={{ fontSize: "12px", margin: "2px 0" }}>{act.description}</p>
-                                        <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
-                                      </div>
+                            {m.actions && m.actions.length > 0 && (
+                              <div className="timeline" style={{ marginTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "12px" }}>
+                                {m.actions.map(act => (
+                                  <div className="timelineStep" key={act.id}>
+                                    <div className={`stepDot ${act.status.toLowerCase()}`}>
+                                      {act.status === "COMPLETED" ? <Check size={13} /> : <Activity size={13} />}
                                     </div>
-                                  ))
-                                )}
+                                    <div className="stepContent">
+                                      <b style={{ fontSize: "12px" }}>{act.actionType}</b>
+                                      <p style={{ fontSize: "12px", margin: "2px 0" }}>{act.description}</p>
+                                      <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    tasks.slice(0, 10).map(t => {
+                      const targetConn = connections.find(c => c.id === t.connectionId);
+                      const matchingFile = files.find(f => f.taskId === t.id || f.fileName.includes(t.id));
+                      const isTraceExpanded = expandedTraceTaskId === t.id;
+                      const traceActions = taskTraceCache[t.id] || [];
+
+                      return (
+                        <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                          {/* User Prompt */}
+                          <div className="geminiUserMessage">
+                            <div className="geminiUserBubble">
+                              <div className="geminiUserBubbleHead">
+                                <span className="geminiTargetTag">
+                                  {targetConn ? `@${targetConn.name}` : "@platform"}
+                                </span>
+                                <small style={{ fontSize: "10px", color: "#64748b" }}>
+                                  {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </small>
+                              </div>
+                              <p className="geminiUserText">{t.prompt}</p>
+                            </div>
+                          </div>
+
+                          {/* Agent Response */}
+                          <div className="geminiAgentMessage">
+                            <div className="geminiAgentAvatar">
+                              <Sparkles size={18} />
+                            </div>
+                            <div className="geminiAgentBubble">
+                              <div className="geminiAgentHead">
+                                <div className="geminiAgentTitle">
+                                  <Bot size={15} color="#6366f1" />
+                                  <span>Universal Agent</span>
+                                  <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "12px" }}>
+                                    • {targetConn?.name || "Target Site"}
+                                  </span>
+                                </div>
+                                <span className={`tag ${t.status === "COMPLETED" ? "tagGreen" : t.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
+                                  {t.status}
+                                </span>
+                              </div>
+
+                              {/* Observe-Plan-Act-Verify Pipeline */}
+                              <div className="geminiPipeline">
+                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                                  <Eye size={11} /> Observe
+                                </div>
+                                <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
+                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                                  <Workflow size={11} /> Plan
+                                </div>
+                                <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
+                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
+                                  <Bot size={11} /> Act
+                                </div>
+                                <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
+                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : ""}`}>
+                                  <ShieldCheck size={11} /> Verify
+                                </div>
+                              </div>
+
+                              {t.result ? (
+                                <div className="geminiResultBox">{t.result}</div>
+                              ) : (
+                                <div className="geminiResultBox" style={{ color: "#64748b" }}>
+                                  Execution recorded. Observe-Plan-Act-Verify cycle processed for destination.
+                                </div>
+                              )}
+
+                              {matchingFile && (
+                                <div className="geminiGeneratedFileBadge">
+                                  <div className="geminiFileLeft">
+                                    <FileSpreadsheet size={18} color="#16a34a" />
+                                    <div>
+                                      <b>{matchingFile.fileName}</b>
+                                      <small style={{ display: "block" }}>{matchingFile.rowCount} records extracted</small>
+                                    </div>
+                                  </div>
+                                  <a
+                                    href={`${API}/files/${matchingFile.id}/download`}
+                                    className="btn btnSecondary"
+                                    style={{ height: "28px", padding: "0 10px", fontSize: "11px", gap: "4px" }}
+                                    download
+                                  >
+                                    <Download size={13} /> Download CSV
+                                  </a>
+                                </div>
+                              )}
+
+                              <div className="geminiActionRow">
+                                <button
+                                  type="button"
+                                  className="geminiTraceBtn"
+                                  onClick={() => toggleTaskTrace(t.id)}
+                                >
+                                  <Activity size={12} />
+                                  <span>{isTraceExpanded ? "Hide Execution Trace" : "View Step-by-Step Trace"}</span>
+                                  {isTraceExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                </button>
+                              </div>
+
+                              {isTraceExpanded && (
+                                <div className="timeline" style={{ marginTop: "14px", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
+                                  {traceActions.length === 0 ? (
+                                    <div style={{ fontSize: "12px", color: "#94a3b8", padding: "6px 0" }}>
+                                      Loading detailed step trace...
+                                    </div>
+                                  ) : (
+                                    traceActions.map(act => (
+                                      <div className="timelineStep" key={act.id}>
+                                        <div className={`stepDot ${act.status.toLowerCase()}`}>
+                                          {act.status === "COMPLETED" ? <Check size={13} /> : <Activity size={13} />}
+                                        </div>
+                                        <div className="stepContent">
+                                          <b style={{ fontSize: "12px" }}>{act.actionType}</b>
+                                          <p style={{ fontSize: "12px", margin: "2px 0" }}>{act.description}</p>
+                                          <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={chatFeedBottomRef} />
                 </div>
 
                 {/* Bottom Docked Input Capsule */}
