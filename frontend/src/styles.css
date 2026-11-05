@@ -391,6 +391,16 @@ body {
   flex-direction: column;
 }
 
+/* Dashboard Full-Bleed Edge-to-Edge Expansion (Zero gutter/padding on top & left) */
+.content.dashboardContent {
+  padding: 0;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
 header.topBar {
   display: flex;
   justify-content: space-between;
@@ -1297,7 +1307,7 @@ header.topBar p {
 
 .geminiInputCapsuleWrapper {
   width: 100%;
-  max-width: 820px;
+  max-width: 960px;
   position: relative;
   z-index: 2;
 }
@@ -1490,17 +1500,17 @@ header.topBar p {
   flex: 1;
   height: 100%;
   width: 100%;
-  max-width: 920px;
+  max-width: 1120px;
   margin: 0 auto;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 10px 20px;
+  padding: 16px 28px 24px;
 }
 .geminiChatTopBar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
 }

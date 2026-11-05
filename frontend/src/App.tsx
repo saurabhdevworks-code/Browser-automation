@@ -1047,7 +1047,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
       </aside>
 
       {/* Main Content Area */}
-      <main className="content">
+      <main className={`content ${activeTab === "dashboard" ? "dashboardContent" : ""}`}>
         {activeTab !== "dashboard" && (
           <header className="topBar">
             <div>
