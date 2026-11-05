@@ -9,13 +9,13 @@ export interface ActionStep {
 }
 
 export interface PlanResult {
-  engine: "groq-llm" | "gemini-llm" | "openai-llm" | "heuristic-engine";
+  engine: "groq-llm" | "gemini-llm" | "openai-llm" | "claude-llm" | "heuristic-engine";
   explanation: string;
   actions: ActionStep[];
 }
 
 export interface AiRuntimeConfig {
-  provider: "groq" | "gemini" | "openai";
+  provider: "gemini" | "openai" | "claude" | "groq";
   apiKey: string;
   model: string;
 }
@@ -28,13 +28,14 @@ export function setRuntimeAiConfig(config: AiRuntimeConfig | null): void {
     if (config.provider === "groq") process.env.GROQ_API_KEY = config.apiKey;
     if (config.provider === "gemini") process.env.GEMINI_API_KEY = config.apiKey;
     if (config.provider === "openai") process.env.OPENAI_API_KEY = config.apiKey;
+    if (config.provider === "claude") process.env.ANTHROPIC_API_KEY = config.apiKey;
   }
 }
 
 export function getRuntimeAiConfig(): { provider: string; model: string; isConfigured: boolean; maskedKey?: string } {
-  const currentKey = activeConfig?.apiKey || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
-  const currentProvider = activeConfig?.provider || (process.env.GEMINI_API_KEY ? "gemini" : (process.env.OPENAI_API_KEY ? "openai" : "groq"));
-  const currentModel = activeConfig?.model || (currentProvider === "gemini" ? "gemini-1.5-flash" : (currentProvider === "openai" ? "gpt-4o-mini" : "llama-3.3-70b-versatile"));
+  const currentKey = activeConfig?.apiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY;
+  const currentProvider = activeConfig?.provider || (process.env.GEMINI_API_KEY ? "gemini" : (process.env.OPENAI_API_KEY ? "openai" : (process.env.ANTHROPIC_API_KEY ? "claude" : "gemini")));
+  const currentModel = activeConfig?.model || (currentProvider === "gemini" ? "gemini-1.5-flash" : (currentProvider === "openai" ? "gpt-4o-mini" : (currentProvider === "claude" ? "claude-3-5-sonnet-20241022" : "llama-3.3-70b-versatile")));
 
   return {
     provider: currentProvider,
@@ -52,13 +53,13 @@ interface PlanInput {
 }
 
 /**
- * Plans actions using configured LLM (Groq, Gemini, or OpenAI) or falls back to Heuristic Intent Engine.
+ * Plans actions using configured LLM (Gemini, OpenAI, Claude, or Groq) or falls back to Heuristic Intent Engine.
  */
 export async function planActions(input: PlanInput): Promise<PlanResult> {
   const config = activeConfig || {
-    provider: (process.env.GEMINI_API_KEY ? "gemini" : (process.env.OPENAI_API_KEY ? "openai" : "groq")) as "groq" | "gemini" | "openai",
-    apiKey: process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || "",
-    model: process.env.GEMINI_API_KEY ? "gemini-1.5-flash" : "llama-3.3-70b-versatile"
+    provider: (process.env.GEMINI_API_KEY ? "gemini" : (process.env.OPENAI_API_KEY ? "openai" : (process.env.ANTHROPIC_API_KEY ? "claude" : "gemini"))) as "gemini" | "openai" | "claude" | "groq",
+    apiKey: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY || "",
+    model: process.env.GEMINI_API_KEY ? "gemini-1.5-flash" : "gpt-4o-mini"
   };
 
   if (config.apiKey) {
@@ -81,8 +82,17 @@ export async function planActions(input: PlanInput): Promise<PlanResult> {
             actions: openaiPlan.actions
           };
         }
+      } else if (config.provider === "claude") {
+        const claudePlan = await callClaudePlanner(config.apiKey, config.model || "claude-3-5-sonnet-20241022", input);
+        if (claudePlan?.actions?.length) {
+          return {
+            engine: "claude-llm",
+            explanation: claudePlan.explanation || "Claude AI automation plan",
+            actions: claudePlan.actions
+          };
+        }
       } else {
-        // Default: Groq
+        // Groq
         const groqPlan = await callGroqPlanner(config.apiKey, config.model || "llama-3.3-70b-versatile", input);
         if (groqPlan?.actions?.length) {
           return {
@@ -120,38 +130,6 @@ Return a valid JSON object ONLY:
     ... action objects ...
   ]
 }`;
-
-async function callGroqPlanner(apiKey: string, model: string, input: PlanInput): Promise<{ explanation: string; actions: ActionStep[] }> {
-  const userPrompt = `Target Site: ${input.url}\nTask: ${input.task}\nHas Credentials: ${Boolean(input.credentials?.username && input.credentials?.password)}`;
-
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: model || "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.1,
-      max_tokens: 1500
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq API error (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty response from Groq");
-  return JSON.parse(content);
-}
 
 async function callGeminiPlanner(apiKey: string, model: string, input: PlanInput): Promise<{ explanation: string; actions: ActionStep[] }> {
   const userPrompt = `${SYSTEM_PROMPT}\n\nTarget Site: ${input.url}\nTask: ${input.task}\nHas Credentials: ${Boolean(input.credentials?.username && input.credentials?.password)}\nRespond with ONLY valid JSON:`;
@@ -208,6 +186,67 @@ async function callOpenAiPlanner(apiKey: string, model: string, input: PlanInput
   return JSON.parse(content);
 }
 
+async function callClaudePlanner(apiKey: string, model: string, input: PlanInput): Promise<{ explanation: string; actions: ActionStep[] }> {
+  const userPrompt = `${SYSTEM_PROMPT}\n\nTarget Site: ${input.url}\nTask: ${input.task}\nHas Credentials: ${Boolean(input.credentials?.username && input.credentials?.password)}\nRespond with ONLY valid JSON:`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: model || "claude-3-5-sonnet-20241022",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: userPrompt }]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Claude API error (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  const text = data.content?.[0]?.text;
+  if (!text) throw new Error("Empty response from Claude");
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  return JSON.parse(jsonMatch ? jsonMatch[0] : text);
+}
+
+async function callGroqPlanner(apiKey: string, model: string, input: PlanInput): Promise<{ explanation: string; actions: ActionStep[] }> {
+  const userPrompt = `Target Site: ${input.url}\nTask: ${input.task}\nHas Credentials: ${Boolean(input.credentials?.username && input.credentials?.password)}`;
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: model || "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 1500
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq API error (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty response from Groq");
+  return JSON.parse(content);
+}
+
 /**
  * Validates an API key with a test call.
  */
@@ -218,10 +257,12 @@ export async function testAiConnection(config: AiRuntimeConfig): Promise<{ succe
       await callGeminiPlanner(config.apiKey, config.model || "gemini-1.5-flash", testInput);
     } else if (config.provider === "openai") {
       await callOpenAiPlanner(config.apiKey, config.model || "gpt-4o-mini", testInput);
+    } else if (config.provider === "claude") {
+      await callClaudePlanner(config.apiKey, config.model || "claude-3-5-sonnet-20241022", testInput);
     } else {
       await callGroqPlanner(config.apiKey, config.model || "llama-3.3-70b-versatile", testInput);
     }
-    return { success: true, message: `Successfully authenticated with ${config.provider.toUpperCase()} (${config.model})!` };
+    return { success: true, message: `Connected to ${config.provider.toUpperCase()} (${config.model}) successfully!` };
   } catch (err) {
     return { success: false, message: err instanceof Error ? err.message : "Validation failed" };
   }

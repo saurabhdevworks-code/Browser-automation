@@ -204,7 +204,7 @@ app.post("/v1/config/ai", async (req, res) => {
     return res.status(400).json({ error: "Missing or invalid API key" });
   }
 
-  const validProvider = ["groq", "gemini", "openai"].includes(provider) ? provider : "groq";
+  const validProvider = ["gemini", "openai", "claude", "groq"].includes(provider) ? provider : "gemini";
   const testRes = await testAiConnection({ provider: validProvider, apiKey, model });
   if (!testRes.success) {
     return res.status(422).json({ error: testRes.message });

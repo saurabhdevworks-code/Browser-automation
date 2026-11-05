@@ -78,9 +78,9 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Settings & AI Configuration state
-  const [aiProvider, setAiProvider] = useState<"groq" | "gemini" | "openai">("groq");
+  const [aiProvider, setAiProvider] = useState<"gemini" | "openai" | "claude" | "groq">("gemini");
   const [aiApiKey, setAiApiKey] = useState<string>("");
-  const [aiModel, setAiModel] = useState<string>("llama-3.3-70b-versatile");
+  const [aiModel, setAiModel] = useState<string>("gemini-1.5-flash");
   const [aiStatus, setAiStatus] = useState<{ isConfigured: boolean; maskedKey?: string; message?: string }>({ isConfigured: false });
   const [showAiKey, setShowAiKey] = useState<boolean>(false);
   const [isTestingAiKey, setIsTestingAiKey] = useState<boolean>(false);
@@ -140,8 +140,8 @@ export default function App() {
   // Load saved AI config from worker & localStorage
   useEffect(() => {
     const savedKey = localStorage.getItem("browser_agent_ai_key");
-    const savedProvider = (localStorage.getItem("browser_agent_ai_provider") as "groq" | "gemini" | "openai") || "groq";
-    const savedModel = localStorage.getItem("browser_agent_ai_model") || "llama-3.3-70b-versatile";
+    const savedProvider = (localStorage.getItem("browser_agent_ai_provider") as "gemini" | "openai" | "claude" | "groq") || "gemini";
+    const savedModel = localStorage.getItem("browser_agent_ai_model") || "gemini-1.5-flash";
     if (savedKey) {
       setAiApiKey(savedKey);
       setAiProvider(savedProvider);
@@ -1837,224 +1837,148 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 8: SETTINGS & AI KEYS */}
+        {/* TAB 8: SETTINGS & AI KEYS (CLEAN & SIMPLE) */}
         {activeTab === "settings" && (
-          <div className="settingsGrid" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            {/* Status Hero Card */}
-            <div className="panel" style={{ borderLeft: aiStatus.isConfigured ? "4px solid #10b981" : "4px solid #f59e0b" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px" }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                    <Cpu size={22} color={aiStatus.isConfigured ? "#10b981" : "#f59e0b"} />
-                    <h2 style={{ margin: 0, fontSize: "18px" }}>
-                      AI Automation Brain: {aiStatus.isConfigured ? `${aiProvider.toUpperCase()} (${aiModel})` : "Heuristic Fallback Mode"}
-                    </h2>
-                    <span className={`tag ${aiStatus.isConfigured ? "tagGreen" : "tagAmber"}`}>
-                      {aiStatus.isConfigured ? "AI LIVE & ACTIVE" : "NO KEY CONFIGURED"}
-                    </span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8" }}>
-                    {aiStatus.isConfigured
-                      ? `All natural language commands are dynamically converted into Playwright browser steps using ${aiProvider.toUpperCase()} LLM.`
-                      : "Configure a Groq, Google Gemini, or OpenAI API key below to unlock deep multimodal reasoning for complex tasks."}
-                  </p>
+          <div className="panel" style={{ maxWidth: "640px", margin: "10px auto 0" }}>
+            <div className="panelHead" style={{ borderBottom: "1px solid rgba(59, 130, 246, 0.15)", paddingBottom: "16px", marginBottom: "20px" }}>
+              <div>
+                <h2 style={{ fontSize: "18px", margin: "0 0 4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Cpu size={20} color="#38bdf8" />
+                  AI Engine Configuration
+                </h2>
+                <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>
+                  Select your AI model provider, enter the model name and your API key.
+                </p>
+              </div>
+              {aiStatus.isConfigured ? (
+                <span className="tag tagGreen" style={{ fontSize: "11px" }}>
+                  Active ({aiProvider.toUpperCase()})
+                </span>
+              ) : (
+                <span className="tag tagAmber" style={{ fontSize: "11px" }}>
+                  Not Configured
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+              {/* 1. Provider Name */}
+              <div className="formGroup">
+                <label style={{ fontSize: "13px", fontWeight: 600 }}>AI Provider</label>
+                <select
+                  value={aiProvider}
+                  onChange={e => {
+                    const p = e.target.value as "gemini" | "openai" | "claude" | "groq";
+                    setAiProvider(p);
+                    if (p === "gemini") setAiModel("gemini-1.5-flash");
+                    else if (p === "openai") setAiModel("gpt-4o-mini");
+                    else if (p === "claude") setAiModel("claude-3-5-sonnet-20241022");
+                    else if (p === "groq") setAiModel("llama-3.3-70b-versatile");
+                  }}
+                  style={{ height: "42px", fontSize: "14px" }}
+                >
+                  <option value="gemini">Google Gemini (Recommended)</option>
+                  <option value="openai">OpenAI (GPT-4o / GPT-4o-mini)</option>
+                  <option value="claude">Claude (Anthropic)</option>
+                  <option value="groq">Groq (Ultra-fast Llama 3.3)</option>
+                </select>
+              </div>
+
+              {/* 2. Model Name */}
+              <div className="formGroup">
+                <label style={{ fontSize: "13px", fontWeight: 600 }}>Model Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. gemini-1.5-flash, gpt-4o-mini, claude-3-5-sonnet, llama-3.3-70b"
+                  value={aiModel}
+                  onChange={e => setAiModel(e.target.value)}
+                  style={{ height: "42px", fontSize: "14px" }}
+                />
+              </div>
+
+              {/* 3. API Key */}
+              <div className="formGroup">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label style={{ fontSize: "13px", fontWeight: 600 }}>API Key</label>
+                  {aiProvider === "gemini" && (
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#38bdf8", textDecoration: "none" }}>
+                      Get Gemini API Key &rarr;
+                    </a>
+                  )}
+                  {aiProvider === "openai" && (
+                    <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#38bdf8", textDecoration: "none" }}>
+                      Get OpenAI API Key &rarr;
+                    </a>
+                  )}
+                  {aiProvider === "claude" && (
+                    <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#38bdf8", textDecoration: "none" }}>
+                      Get Claude API Key &rarr;
+                    </a>
+                  )}
+                  {aiProvider === "groq" && (
+                    <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#38bdf8", textDecoration: "none" }}>
+                      Get Groq API Key &rarr;
+                    </a>
+                  )}
                 </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showAiKey ? "text" : "password"}
+                    placeholder={`Paste your ${aiProvider.toUpperCase()} API Key here`}
+                    value={aiApiKey}
+                    onChange={e => setAiApiKey(e.target.value)}
+                    style={{ height: "42px", fontSize: "14px", paddingRight: "44px" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAiKey(prev => !prev)}
+                    style={{
+                      position: "absolute",
+                      right: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#94a3b8"
+                    }}
+                    title={showAiKey ? "Hide key" : "Show key"}
+                  >
+                    {showAiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* 4. Action Buttons */}
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: "10px" }}>
+                <button
+                  type="button"
+                  className="btn btnPrimary"
+                  onClick={handleSaveAiConfig}
+                  disabled={isTestingAiKey || !aiApiKey.trim()}
+                  style={{ minWidth: "160px", height: "40px", fontSize: "13px" }}
+                >
+                  {isTestingAiKey ? (
+                    <>
+                      <RefreshCw size={14} className="spin" /> Verifying Key...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} /> Save & Connect
+                    </>
+                  )}
+                </button>
+
                 {aiStatus.isConfigured && (
                   <button
                     type="button"
                     className="btn btnSecondary"
                     onClick={handleClearAiConfig}
-                    style={{ fontSize: "12px", height: "32px", color: "#ef4444" }}
+                    style={{ height: "40px", fontSize: "13px", color: "#ef4444" }}
                   >
-                    Disconnect AI Key
+                    Disconnect
                   </button>
                 )}
-              </div>
-            </div>
-
-            {/* AI Provider Configuration Card */}
-            <div className="panel">
-              <div className="panelHead">
-                <div>
-                  <h2>Connect AI Provider & LLM Key</h2>
-                  <p>Choose your preferred AI brain. Groq Llama 3.3 70B is recommended for ultra-fast (&lt;500ms) browser action planning.</p>
-                </div>
-              </div>
-
-              {/* Provider Selection Buttons */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginBottom: "22px" }}>
-                {/* Groq Card */}
-                <div
-                  onClick={() => {
-                    setAiProvider("groq");
-                    setAiModel("llama-3.3-70b-versatile");
-                  }}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    border: aiProvider === "groq" ? "2px solid #38bdf8" : "1px solid rgba(59, 130, 246, 0.2)",
-                    background: aiProvider === "groq" ? "rgba(30, 58, 138, 0.35)" : "rgba(15, 23, 42, 0.5)",
-                    transition: "all 0.2s"
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <b style={{ fontSize: "14px", color: "#38bdf8" }}>Groq Cloud (Fastest)</b>
-                    <span className="tag tagGreen" style={{ fontSize: "10px" }}>Recommended</span>
-                  </div>
-                  <small style={{ color: "#94a3b8", display: "block", fontSize: "12px" }}>
-                    Ultra-fast inference (500+ tokens/sec). Powers Llama 3.3 70B for instant step planning.
-                  </small>
-                </div>
-
-                {/* Google Gemini Card */}
-                <div
-                  onClick={() => {
-                    setAiProvider("gemini");
-                    setAiModel("gemini-1.5-flash");
-                  }}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    border: aiProvider === "gemini" ? "2px solid #8b5cf6" : "1px solid rgba(59, 130, 246, 0.2)",
-                    background: aiProvider === "gemini" ? "rgba(76, 29, 149, 0.35)" : "rgba(15, 23, 42, 0.5)",
-                    transition: "all 0.2s"
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <b style={{ fontSize: "14px", color: "#a78bfa" }}>Google Gemini API</b>
-                    <span className="tag tagPurple" style={{ fontSize: "10px" }}>Multimodal</span>
-                  </div>
-                  <small style={{ color: "#94a3b8", display: "block", fontSize: "12px" }}>
-                    Gemini 1.5 Flash / Pro. Exceptional Hindi/English understanding and large DOM context.
-                  </small>
-                </div>
-
-                {/* OpenAI Card */}
-                <div
-                  onClick={() => {
-                    setAiProvider("openai");
-                    setAiModel("gpt-4o-mini");
-                  }}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    border: aiProvider === "openai" ? "2px solid #10b981" : "1px solid rgba(59, 130, 246, 0.2)",
-                    background: aiProvider === "openai" ? "rgba(6, 78, 59, 0.35)" : "rgba(15, 23, 42, 0.5)",
-                    transition: "all 0.2s"
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <b style={{ fontSize: "14px", color: "#34d399" }}>OpenAI API</b>
-                    <span className="tag tagBlue" style={{ fontSize: "10px" }}>Standard</span>
-                  </div>
-                  <small style={{ color: "#94a3b8", display: "block", fontSize: "12px" }}>
-                    GPT-4o / GPT-4o-mini. Reliable structured tool-calling and step-by-step reasoning.
-                  </small>
-                </div>
-              </div>
-
-              {/* Form Controls */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-                {/* Model Selector */}
-                <div className="formGroup">
-                  <label>Select AI Model</label>
-                  <select value={aiModel} onChange={e => setAiModel(e.target.value)}>
-                    {aiProvider === "groq" && (
-                      <>
-                        <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Recommended - High Accuracy)</option>
-                        <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Fastest Response)</option>
-                        <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-                      </>
-                    )}
-                    {aiProvider === "gemini" && (
-                      <>
-                        <option value="gemini-1.5-flash">gemini-1.5-flash (Fast & Accurate)</option>
-                        <option value="gemini-1.5-pro">gemini-1.5-pro (Deep Reasoning)</option>
-                      </>
-                    )}
-                    {aiProvider === "openai" && (
-                      <>
-                        <option value="gpt-4o-mini">gpt-4o-mini (Fast & Cost Effective)</option>
-                        <option value="gpt-4o">gpt-4o (Full Flagship Intelligence)</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* API Key Input with Eye Toggle */}
-                <div className="formGroup">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <label>{aiProvider.toUpperCase()} API Key</label>
-                    {aiProvider === "groq" && (
-                      <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#38bdf8", textDecoration: "none" }}>
-                        Get free Groq key &rarr;
-                      </a>
-                    )}
-                    {aiProvider === "gemini" && (
-                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#a78bfa", textDecoration: "none" }}>
-                        Get free Gemini key &rarr;
-                      </a>
-                    )}
-                    {aiProvider === "openai" && (
-                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#34d399", textDecoration: "none" }}>
-                        Get OpenAI key &rarr;
-                      </a>
-                    )}
-                  </div>
-                  <div style={{ position: "relative" }}>
-                    <input
-                      type={showAiKey ? "text" : "password"}
-                      placeholder={aiProvider === "groq" ? "gsk_..." : (aiProvider === "gemini" ? "AIzaSy..." : "sk-proj-...")}
-                      value={aiApiKey}
-                      onChange={e => setAiApiKey(e.target.value)}
-                      style={{ paddingRight: "44px" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowAiKey(prev => !prev)}
-                      style={{
-                        position: "absolute",
-                        right: "12px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "#94a3b8"
-                      }}
-                      title={showAiKey ? "Hide key" : "Show key"}
-                    >
-                      {showAiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                  <small style={{ color: "#64748b", fontSize: "11px" }}>
-                    Your API key is stored securely in your private session and memory. It is never logged or exposed.
-                  </small>
-                </div>
-
-                {/* Submit & Test Button */}
-                <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: "6px" }}>
-                  <button
-                    type="button"
-                    className="btn btnPrimary"
-                    onClick={handleSaveAiConfig}
-                    disabled={isTestingAiKey || !aiApiKey.trim()}
-                    style={{ minWidth: "160px" }}
-                  >
-                    {isTestingAiKey ? (
-                      <>
-                        <RefreshCw size={14} className="spin" /> Verifying API Key...
-                      </>
-                    ) : (
-                      <>
-                        <Check size={14} /> Test & Save AI Key
-                      </>
-                    )}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
