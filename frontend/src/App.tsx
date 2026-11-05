@@ -1280,9 +1280,16 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                           className="geminiHistoryDeleteBtn"
                           onClick={e => {
                             e.stopPropagation();
-                            setTasks(prev => prev.filter(item => item.id !== t.id));
+                            const taskId = t.id;
+                            setTasks(prev => prev.filter(item => item.id !== taskId));
+                            if (activeHistoryId === taskId) {
+                              setActiveHistoryId(null);
+                              setChatMessages([]);
+                              setConversationStarted(false);
+                            }
+                            showToast("Command removed from history.", "info");
                           }}
-                          title="Remove from history"
+                          title="Delete from history"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -1322,23 +1329,22 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 <div className="geminiChatStage">
                   {/* Chat Top Header */}
                   <div className="geminiChatTopBar">
-                    <div className="geminiChatTitle">
-                      <Sparkles size={18} color="#7c3aed" />
-                      <b>AI Command Center</b>
-                      <small>Active Observe-Plan-Act-Verify Session</small>
+                    <div className="geminiChatIconOnly" title="AI Command Center">
+                      <Sparkles size={20} className="geminiSparkleIcon" />
                     </div>
                     <button
                       type="button"
-                      className="btn btnSecondary"
-                      style={{ height: "30px", fontSize: "12px", padding: "0 12px", gap: "6px" }}
+                      className="geminiTopBarIconBtn"
                       onClick={() => {
                         setConversationStarted(false);
                         setGeminiPrompt("");
                         setSelectedTarget("");
                         setShowPlusMenu(false);
+                        setActiveHistoryId(null);
                       }}
+                      title="New Command"
                     >
-                      <Plus size={14} /> New Command
+                      <Plus size={16} />
                     </button>
                   </div>
 

@@ -398,8 +398,10 @@ body {
   white-space: nowrap;
 }
 .geminiHistoryDeleteBtn {
-  background: transparent;
-  border: none;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
   color: #64748b;
   cursor: pointer;
   padding: 4px;
@@ -407,13 +409,15 @@ body {
   display: none;
   align-items: center;
   justify-content: center;
+  transition: color 0.15s ease, transform 0.15s ease;
 }
 .geminiHistoryItem:hover .geminiHistoryDeleteBtn {
   display: inline-flex;
 }
 .geminiHistoryDeleteBtn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444 !important;
+  background: transparent !important;
+  transform: scale(1.15);
 }
 .geminiHistoryEmpty {
   font-size: 12px;
@@ -1779,10 +1783,37 @@ header.topBar p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 28px;
+  padding: 12px 28px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   flex-shrink: 0;
   width: 100%;
+}
+.geminiChatIconOnly {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8ab4f8;
+}
+.geminiSparkleIcon {
+  color: #8ab4f8;
+  filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.4));
+}
+.geminiTopBarIconBtn {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 50%;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.geminiTopBarIconBtn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
 }
 .geminiChatTitle {
   display: flex;
