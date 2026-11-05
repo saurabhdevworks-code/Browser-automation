@@ -1058,18 +1058,63 @@ header.topBar p {
   color: #ffffff;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuDropdown {
-  background: #0f172a;
-  border-color: #1e293b;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 24px rgba(37, 99, 235, 0.18);
+  background: rgba(11, 20, 38, 0.96);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 30px rgba(37, 99, 235, 0.2);
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuSectionTitle {
+  color: #64748b;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuItem {
+  border: 1px solid transparent;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem:hover {
-  background: #1e293b;
+  background: rgba(30, 41, 59, 0.75);
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuItem.selected {
+  background: rgba(30, 58, 138, 0.45);
+  border: 1px solid rgba(59, 130, 246, 0.45);
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem b {
   color: #f8fafc;
 }
+.geminiScreenWrapper.darkTheme .geminiPlusMenuItem small {
+  color: #94a3b8;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuItem.selected b {
+  color: #ffffff;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuItem.selected small {
+  color: #bfdbfe;
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuIcon {
+  background: rgba(30, 41, 59, 0.85);
+  color: #94a3b8;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuIcon.allIcon {
+  background: rgba(6, 78, 59, 0.6);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.geminiScreenWrapper.darkTheme .geminiPlusMenuIcon.addIcon {
+  background: rgba(120, 53, 15, 0.6);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
 .geminiScreenWrapper.darkTheme .geminiPlusMenuDivider {
-  background: #1e293b;
+  background: rgba(59, 130, 246, 0.18);
+}
+.geminiScreenWrapper.darkTheme .tagGreen {
+  background: rgba(6, 78, 59, 0.6);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.geminiScreenWrapper.darkTheme .tagBlue {
+  background: rgba(30, 58, 138, 0.6);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.35);
 }
 .geminiScreenWrapper.darkTheme .geminiChatTopBar {
   border-bottom-color: rgba(59, 130, 246, 0.15);
