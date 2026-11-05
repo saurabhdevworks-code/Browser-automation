@@ -591,26 +591,27 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="content">
-        <header className="topBar">
-          <div>
-            <div className="eyebrow">UNIVERSAL AI BROWSER AGENT / SAAS CORE</div>
-            <h1>
-              {activeTab === "dashboard" && "AI Command Center"}
-              {activeTab === "connections" && "Connected Platforms & Accounts"}
-              {activeTab === "capabilities" && "Dynamic Capability Discovery Matrix"}
-              {activeTab === "social" && "Social Media & WhatsApp Hub"}
-              {activeTab === "approvals" && "Risk-Based Approval Center"}
-              {activeTab === "files" && "Generated Files & Extracted Reports"}
-              {activeTab === "security" && "Security Vault & Audit Trail"}
-            </h1>
-            <p>One AI Agent. One Command Interface. Natural-Language Digital Execution.</p>
-          </div>
-          <div className="headerActions">
-            <button className="btn btnSecondary" onClick={loadData}>
-              <RefreshCw size={14} /> Refresh
-            </button>
-          </div>
-        </header>
+        {activeTab !== "dashboard" && (
+          <header className="topBar">
+            <div>
+              <div className="eyebrow">UNIVERSAL AI BROWSER AGENT / SAAS CORE</div>
+              <h1>
+                {activeTab === "connections" && "Connected Platforms & Accounts"}
+                {activeTab === "capabilities" && "Dynamic Capability Discovery Matrix"}
+                {activeTab === "social" && "Social Media & WhatsApp Hub"}
+                {activeTab === "approvals" && "Risk-Based Approval Center"}
+                {activeTab === "files" && "Generated Files & Extracted Reports"}
+                {activeTab === "security" && "Security Vault & Audit Trail"}
+              </h1>
+              <p>One AI Agent. One Command Interface. Natural-Language Digital Execution.</p>
+            </div>
+            <div className="headerActions">
+              <button className="btn btnSecondary" onClick={loadData}>
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
+          </header>
+        )}
 
       {/* Floating Toast Notification Stack (Green, Red, Blue) */}
       <div className="toastContainer">
@@ -839,75 +840,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Quick Suggestion Cards */}
-            <div style={{ marginTop: "4px" }}>
-              <div className="geminiSuggestionsHeader">
-                <Sparkles size={13} color="#8b5cf6" />
-                <span>Suggested Automation Prompts</span>
-              </div>
-              <div className="geminiSuggestionsGrid">
-                <div
-                  className="geminiSuggestionCard"
-                  onClick={() => {
-                    setSelectedTarget("all");
-                    setGeminiPrompt("@all Inspect portal homepage, extract all navigation links and export CSV report");
-                    geminiTextareaRef.current?.focus();
-                  }}
-                >
-                  <div className="sugTarget"><Globe2 size={11} /> @all</div>
-                  <div className="sugText">Inspect all connected websites and extract navigation links into CSV report.</div>
-                </div>
-
-                <div
-                  className="geminiSuggestionCard"
-                  onClick={() => {
-                    const first = connections[0];
-                    if (first) {
-                      setSelectedTarget(first.id);
-                      setGeminiPrompt(`@${first.name} Extract visible DOM hierarchy, interactive buttons and page summary`);
-                    } else {
-                      setSelectedTarget("all");
-                      setGeminiPrompt("@all Extract visible DOM hierarchy, interactive buttons and page summary");
-                    }
-                    geminiTextareaRef.current?.focus();
-                  }}
-                >
-                  <div className="sugTarget"><Bot size={11} /> @{connections[0]?.name || "website"}</div>
-                  <div className="sugText">Extract DOM structure, interactive anchors and page summary.</div>
-                </div>
-
-                <div
-                  className="geminiSuggestionCard"
-                  onClick={() => {
-                    setSelectedTarget("all");
-                    setGeminiPrompt("@all Run automated health check and verify website responsiveness");
-                    geminiTextareaRef.current?.focus();
-                  }}
-                >
-                  <div className="sugTarget"><Activity size={11} /> @all</div>
-                  <div className="sugText">Run automated health check and verify responsive rendering across all sites.</div>
-                </div>
-
-                <div
-                  className="geminiSuggestionCard"
-                  onClick={() => {
-                    const target = connections[1] || connections[0];
-                    if (target) {
-                      setSelectedTarget(target.id);
-                      setGeminiPrompt(`@${target.name} Audit page security headers, SSL status and form inputs`);
-                    } else {
-                      setSelectedTarget("all");
-                      setGeminiPrompt("@all Audit page security headers, SSL status and form inputs");
-                    }
-                    geminiTextareaRef.current?.focus();
-                  }}
-                >
-                  <div className="sugTarget"><ShieldCheck size={11} /> @{connections[1]?.name || connections[0]?.name || "security"}</div>
-                  <div className="sugText">Audit security headers, SSL status, forms and input safety.</div>
-                </div>
-              </div>
-            </div>
-
             {/* Quick Connect Website Modal */}
             {showQuickAddModal && (
               <div className="modalOverlay" onClick={() => setShowQuickAddModal(false)}>
@@ -964,163 +896,6 @@ export default function App() {
                 </div>
               </div>
             )}
-
-            {/* Conversational Stream: Recent Executions & Agent Responses */}
-            <div className="geminiStream">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-muted)", margin: 0, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                  Agent Activity & Execution Stream
-                </h3>
-                {tasks.length > 0 && (
-                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                    Showing latest {Math.min(tasks.length, 10)} task(s)
-                  </span>
-                )}
-              </div>
-
-              {tasks.length === 0 ? (
-                <div className="panel" style={{ textAlign: "center", padding: "40px 20px" }}>
-                  <Sparkles size={36} color="#8b5cf6" style={{ margin: "0 auto 12px", display: "block" }} />
-                  <h4 style={{ margin: "0 0 6px", fontFamily: "var(--font-heading)" }}>No instructions executed yet</h4>
-                  <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
-                    Type a prompt above or pick a suggestion to launch an Observe-Plan-Act-Verify browser cycle.
-                  </p>
-                </div>
-              ) : (
-                tasks.slice(0, 10).map(t => {
-                  const targetConn = connections.find(c => c.id === t.connectionId);
-                  const matchingFile = files.find(f => f.taskId === t.id || f.fileName.includes(t.id));
-                  const isTraceExpanded = expandedTraceTaskId === t.id;
-                  const traceActions = taskTraceCache[t.id] || [];
-
-                  return (
-                    <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      {/* User Query Bubble */}
-                      <div className="geminiUserMessage">
-                        <div className="geminiUserBubble">
-                          <div className="geminiUserBubbleHead">
-                            <span className="geminiTargetTag">
-                              {targetConn ? `@${targetConn.name}` : "@platform"}
-                            </span>
-                            <small style={{ fontSize: "10px", color: "#64748b" }}>
-                              {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </small>
-                          </div>
-                          <p className="geminiUserText">{t.prompt}</p>
-                        </div>
-                      </div>
-
-                      {/* Gemini Agent Response Card */}
-                      <div className="geminiAgentMessage">
-                        <div className="geminiAgentAvatar">
-                          <Sparkles size={18} />
-                        </div>
-                        <div className="geminiAgentBubble">
-                          <div className="geminiAgentHead">
-                            <div className="geminiAgentTitle">
-                              <Bot size={15} color="#6366f1" />
-                              <span>Universal Agent</span>
-                              <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "12px" }}>
-                                • {targetConn?.name || "Target Site"}
-                              </span>
-                            </div>
-                            <span className={`tag ${t.status === "COMPLETED" ? "tagGreen" : t.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
-                              {t.status}
-                            </span>
-                          </div>
-
-                          {/* Observability Pipeline: Observe -> Plan -> Act -> Verify */}
-                          <div className="geminiPipeline">
-                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
-                              <Eye size={11} /> Observe
-                            </div>
-                            <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
-                              <Workflow size={11} /> Plan
-                            </div>
-                            <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
-                              <Bot size={11} /> Act
-                            </div>
-                            <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                            <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : ""}`}>
-                              <ShieldCheck size={11} /> Verify
-                            </div>
-                          </div>
-
-                          {/* Result Text */}
-                          {t.result ? (
-                            <div className="geminiResultBox">{t.result}</div>
-                          ) : (
-                            <div className="geminiResultBox" style={{ color: "#64748b" }}>
-                              Execution recorded. Observe-Plan-Act-Verify cycle processed for destination.
-                            </div>
-                          )}
-
-                          {/* Generated File Link (if any) */}
-                          {matchingFile && (
-                            <div className="geminiGeneratedFileBadge">
-                              <div className="geminiFileLeft">
-                                <FileSpreadsheet size={18} color="#16a34a" />
-                                <div>
-                                  <b>{matchingFile.fileName}</b>
-                                  <small style={{ display: "block" }}>{matchingFile.rowCount} records extracted</small>
-                                </div>
-                              </div>
-                              <a
-                                href={`${API}/files/${matchingFile.id}/download`}
-                                className="btn btnSecondary"
-                                style={{ height: "28px", padding: "0 10px", fontSize: "11px", gap: "4px" }}
-                                download
-                              >
-                                <Download size={13} /> Download CSV
-                              </a>
-                            </div>
-                          )}
-
-                          {/* Trace Action Row */}
-                          <div className="geminiActionRow">
-                            <button
-                              type="button"
-                              className="geminiTraceBtn"
-                              onClick={() => toggleTaskTrace(t.id)}
-                            >
-                              <Activity size={12} />
-                              <span>{isTraceExpanded ? "Hide Execution Trace" : "View Step-by-Step Trace"}</span>
-                              {isTraceExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                            </button>
-                          </div>
-
-                          {/* Expandable Trace Timeline */}
-                          {isTraceExpanded && (
-                            <div className="timeline" style={{ marginTop: "14px", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
-                              {traceActions.length === 0 ? (
-                                <div style={{ fontSize: "12px", color: "#94a3b8", padding: "6px 0" }}>
-                                  Loading detailed step trace...
-                                </div>
-                              ) : (
-                                traceActions.map(act => (
-                                  <div className="timelineStep" key={act.id}>
-                                    <div className={`stepDot ${act.status.toLowerCase()}`}>
-                                      {act.status === "COMPLETED" ? <Check size={13} /> : <Activity size={13} />}
-                                    </div>
-                                    <div className="stepContent">
-                                      <b style={{ fontSize: "12px" }}>{act.actionType}</b>
-                                      <p style={{ fontSize: "12px", margin: "2px 0" }}>{act.description}</p>
-                                      <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
-                                    </div>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
           </div>
         )}
 
