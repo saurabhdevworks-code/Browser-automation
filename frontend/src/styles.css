@@ -1638,16 +1638,41 @@ header.topBar p {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: flex-start;
 }
-.geminiResponseText {
-  font-size: 15px;
-  line-height: 1.7;
+
+/* AI Agent Response Box / Pill */
+.geminiAgentPill {
+  background: #282a2c;
   color: #f1f5f9;
-  white-space: pre-wrap;
+  border-radius: 24px;
+  padding: 10px 20px;
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 80%;
+  width: fit-content;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.12);
   word-break: break-word;
 }
-.geminiScreenWrapper.lightTheme .geminiResponseText {
+.geminiScreenWrapper.darkTheme .geminiAgentPill {
+  background: #1e2430;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: #f1f5f9;
+}
+.geminiScreenWrapper.lightTheme .geminiAgentPill {
+  background: #f0f4f9;
+  border: 1px solid #e2e8f0;
   color: #1f1f1f;
+  box-shadow: none;
+}
+
+.geminiResponseText {
+  font-size: 15px;
+  line-height: 1.6;
+  color: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Gemini Signature Thinking Dots Animation (Gradient Dot Pulse) */

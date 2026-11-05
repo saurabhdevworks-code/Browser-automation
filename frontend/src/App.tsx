@@ -1145,18 +1145,20 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                             <Sparkles size={20} />
                           </div>
                           <div className="geminiAgentBody">
-                            {m.status === "THINKING" ? (
-                              <div className="geminiThinkingWrapper">
-                                <div className="geminiGeminiDots">
-                                  <span className="geminiDot dot1" />
-                                  <span className="geminiDot dot2" />
-                                  <span className="geminiDot dot3" />
+                            <div className="geminiAgentPill">
+                              {m.status === "THINKING" ? (
+                                <div className="geminiThinkingWrapper">
+                                  <div className="geminiGeminiDots">
+                                    <span className="geminiDot dot1" />
+                                    <span className="geminiDot dot2" />
+                                    <span className="geminiDot dot3" />
+                                  </div>
+                                  <span className="geminiThinkingText">{m.content || "Thinking..."}</span>
                                 </div>
-                                <span className="geminiThinkingText">{m.content || "Thinking..."}</span>
-                              </div>
-                            ) : (
-                              <div className="geminiResponseText">{m.content}</div>
-                            )}
+                              ) : (
+                                <div className="geminiResponseText">{m.content}</div>
+                              )}
+                            </div>
 
                             {m.file && (
                               <div className="geminiGeneratedFileBadge">
@@ -1211,72 +1213,30 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                       const traceActions = taskTraceCache[t.id] || [];
 
                       return (
-                        <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
                           {/* User Prompt */}
                           <div className="geminiUserMessage">
-                            <div className="geminiUserBubble">
-                              <div className="geminiUserBubbleHead">
-                                <span className="geminiTargetTag">
-                                  {targetConn ? `@${targetConn.name}` : "@platform"}
-                                </span>
-                                <small style={{ fontSize: "10px", color: "#64748b" }}>
-                                  {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </small>
-                              </div>
-                              <p className="geminiUserText">{t.prompt}</p>
+                            <div className="geminiUserPill">
+                              {t.prompt}
                             </div>
                           </div>
 
                           {/* Agent Response */}
                           <div className="geminiAgentMessage">
                             <div className="geminiAgentAvatar">
-                              <Sparkles size={18} />
+                              <Sparkles size={20} />
                             </div>
-                            <div className="geminiAgentBubble">
-                              <div className="geminiAgentHead">
-                                <div className="geminiAgentTitle">
-                                  <Bot size={15} color="#6366f1" />
-                                  <span>Universal Agent</span>
-                                  <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "12px" }}>
-                                    • {targetConn?.name || "Target Site"}
-                                  </span>
-                                </div>
-                                <span className={`tag ${t.status === "COMPLETED" ? "tagGreen" : t.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
-                                  {t.status}
-                                </span>
-                              </div>
-
-                              {/* Observe-Plan-Act-Verify Pipeline */}
-                              <div className="geminiPipeline">
-                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
-                                  <Eye size={11} /> Observe
-                                </div>
-                                <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
-                                  <Workflow size={11} /> Plan
-                                </div>
-                                <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : "running"}`}>
-                                  <Bot size={11} /> Act
-                                </div>
-                                <span style={{ color: "#cbd5e1", fontSize: "11px" }}>→</span>
-                                <div className={`geminiPipeStep ${t.status === "COMPLETED" ? "done" : ""}`}>
-                                  <ShieldCheck size={11} /> Verify
+                            <div className="geminiAgentBody">
+                              <div className="geminiAgentPill">
+                                <div className="geminiResponseText">
+                                  {t.result || "Execution recorded. Observe-Plan-Act-Verify cycle processed for destination."}
                                 </div>
                               </div>
-
-                              {t.result ? (
-                                <div className="geminiResultBox">{t.result}</div>
-                              ) : (
-                                <div className="geminiResultBox" style={{ color: "#64748b" }}>
-                                  Execution recorded. Observe-Plan-Act-Verify cycle processed for destination.
-                                </div>
-                              )}
 
                               {matchingFile && (
                                 <div className="geminiGeneratedFileBadge">
                                   <div className="geminiFileLeft">
-                                    <FileSpreadsheet size={18} color="#16a34a" />
+                                    <FileSpreadsheet size={18} color="#10b981" />
                                     <div>
                                       <b>{matchingFile.fileName}</b>
                                       <small style={{ display: "block" }}>{matchingFile.rowCount} records extracted</small>
@@ -1293,7 +1253,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                                 </div>
                               )}
 
-                              <div className="geminiActionRow">
+                              <div className="geminiActionRow" style={{ marginTop: "4px" }}>
                                 <button
                                   type="button"
                                   className="geminiTraceBtn"
@@ -1306,25 +1266,27 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                               </div>
 
                               {isTraceExpanded && (
-                                <div className="timeline" style={{ marginTop: "14px", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
-                                  {traceActions.length === 0 ? (
-                                    <div style={{ fontSize: "12px", color: "#94a3b8", padding: "6px 0" }}>
-                                      Loading detailed step trace...
-                                    </div>
-                                  ) : (
-                                    traceActions.map(act => (
-                                      <div className="timelineStep" key={act.id}>
-                                        <div className={`stepDot ${act.status.toLowerCase()}`}>
-                                          {act.status === "COMPLETED" ? <Check size={13} /> : <Activity size={13} />}
-                                        </div>
-                                        <div className="stepContent">
-                                          <b style={{ fontSize: "12px" }}>{act.actionType}</b>
-                                          <p style={{ fontSize: "12px", margin: "2px 0" }}>{act.description}</p>
-                                          <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
-                                        </div>
+                                <div className="geminiTraceAccordion" style={{ marginTop: "8px" }}>
+                                  <div className="timeline">
+                                    {traceActions.length === 0 ? (
+                                      <div style={{ fontSize: "12px", color: "#94a3b8", padding: "6px 0" }}>
+                                        Loading detailed step trace...
                                       </div>
-                                    ))
-                                  )}
+                                    ) : (
+                                      traceActions.map(act => (
+                                        <div className="timelineStep" key={act.id}>
+                                          <div className={`stepDot ${act.status.toLowerCase()}`}>
+                                            {act.status === "COMPLETED" ? <Check size={13} /> : <Activity size={13} />}
+                                          </div>
+                                          <div className="stepContent">
+                                            <b style={{ fontSize: "12px" }}>{act.actionType}</b>
+                                            <p style={{ fontSize: "12px", margin: "2px 0" }}>{act.description}</p>
+                                            <small style={{ color: "#94a3b8", fontSize: "10px" }}>{new Date(act.createdAt).toLocaleTimeString()}</small>
+                                          </div>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>
