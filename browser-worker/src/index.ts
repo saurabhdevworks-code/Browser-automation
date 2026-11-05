@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertSafeHttpUrl } from "./security/url-policy.js";
-import { planActions } from "./ai/groq-planner.js";
+import { planActions, setRuntimeAiConfig, getRuntimeAiConfig, testAiConnection } from "./ai/groq-planner.js";
 import { executePlan } from "./executor/action-executor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -192,6 +192,30 @@ app.post("/v1/cancel-login", async (_req, res) => {
     activeLoginSession = null;
   }
   return res.json({ status: "CANCELLED" });
+});
+
+app.get("/v1/config/ai", (_req, res) => {
+  return res.json(getRuntimeAiConfig());
+});
+
+app.post("/v1/config/ai", async (req, res) => {
+  const { provider, apiKey, model } = req.body || {};
+  if (!apiKey || typeof apiKey !== "string") {
+    return res.status(400).json({ error: "Missing or invalid API key" });
+  }
+
+  const validProvider = ["groq", "gemini", "openai"].includes(provider) ? provider : "groq";
+  const testRes = await testAiConnection({ provider: validProvider, apiKey, model });
+  if (!testRes.success) {
+    return res.status(422).json({ error: testRes.message });
+  }
+
+  setRuntimeAiConfig({ provider: validProvider, apiKey, model });
+  return res.json({
+    success: true,
+    message: testRes.message,
+    config: getRuntimeAiConfig()
+  });
 });
 
 app.listen(port, "0.0.0.0", () => console.log(`Browser worker listening on ${port}`));
