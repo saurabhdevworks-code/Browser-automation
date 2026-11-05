@@ -963,7 +963,7 @@ export default function App() {
                 return {
                   ...m,
                   status: "COMPLETED",
-                  content: `Hello Saurabh! I am your Universal Browser AI Agent.
+                  content: `Hello Saurabh! I am Navio, your Universal Browser AI Agent.
 
 I can automate web actions, navigate portals, auto-fill credentials, and extract data.
 
@@ -1300,7 +1300,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
         <div className="brand">
           <div className="brandIcon"><Bot size={22} /></div>
           <div>
-            <b>Universal Agent</b>
+            <b>Navio</b>
             <small>ENTERPRISE COMMAND</small>
           </div>
         </div>
@@ -1357,7 +1357,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
         {activeTab !== "dashboard" && (
           <header className="topBar">
             <div>
-              <div className="eyebrow">UNIVERSAL AI BROWSER AGENT / SAAS CORE</div>
+              <div className="eyebrow">NAVIO / ENTERPRISE AI BROWSER AGENT</div>
               <h1>
                 {activeTab === "connections" && "Connected Platforms & Accounts"}
                 {activeTab === "capabilities" && "Dynamic Capability Discovery Matrix"}
@@ -1367,7 +1367,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 {activeTab === "security" && "Security Vault & Audit Trail"}
                 {activeTab === "settings" && "Settings & AI Engine Configuration"}
               </h1>
-              <p>One AI Agent. One Command Interface. Natural-Language Digital Execution.</p>
+              <p>Navio: One AI Agent. One Command Interface. Natural-Language Digital Execution.</p>
             </div>
             <div className="headerActions">
               {renderThemeToggle(false)}
@@ -2100,7 +2100,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                   <textarea
                     value={postContent}
                     onChange={e => setPostContent(e.target.value)}
-                    placeholder="Announcing our Universal AI Browser Agent! Automate data workflows, ERP audits, and business inquiries seamlessly."
+                    placeholder="Announcing Navio! Automate data workflows, ERP audits, and business inquiries seamlessly."
                     required
                   />
                 </label>

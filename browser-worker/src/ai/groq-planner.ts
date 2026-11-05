@@ -145,7 +145,7 @@ export async function planActions(input: PlanInput): Promise<PlanResult> {
   return planActionsHeuristic(input);
 }
 
-const SYSTEM_PROMPT = `You are an Autonomous AI Browser Automation Agent.
+const SYSTEM_PROMPT = `You are Navio, an Autonomous AI Browser Automation Agent.
 Your job is to convert natural language instructions (English, Hindi, or Hinglish, e.g. "LinkedIn pe 10 Java jobs apply karo", "Canva me search karo banner designs", "Login to portal and scrape items") into concrete browser steps.
 
 Available action types:
@@ -378,7 +378,7 @@ export async function askAiChat(prompt: string): Promise<string> {
   const currentKey = activeConfig?.apiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY;
   if (!currentKey) {
     if (/^(hi|hy|hello|hey|namaste)\b/i.test(cleanPrompt)) {
-      return "Hello Saurabh! I am your Universal Browser AI Agent. You can ask me questions, execute web automations with @platform, or configure an AI key in Settings.";
+      return "Hello Saurabh! I am Navio, your Universal Browser AI Agent. You can ask me questions, execute web automations with @platform, or configure an AI key in Settings.";
     }
     return `Instruction received: "${cleanPrompt}". You can target connected platforms using @platform (e.g. @canva) or configure an AI model key in Settings for general conversational intelligence.`;
   }
