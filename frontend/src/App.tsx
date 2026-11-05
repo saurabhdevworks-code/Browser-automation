@@ -249,6 +249,11 @@ export default function App() {
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    type: "single" | "all";
+    taskId?: string;
+    taskPrompt?: string;
+  } | null>(null);
   const [quickConnName, setQuickConnName] = useState("");
   const [quickConnUrl, setQuickConnUrl] = useState("");
   const [expandedTraceTaskId, setExpandedTraceTaskId] = useState<string | null>(null);
@@ -512,8 +517,7 @@ export default function App() {
     }
   }
 
-  async function handleClearAllTasks() {
-    if (!window.confirm("Permanently delete all command history from database?")) return;
+  async function executeClearAllTasks() {
     setTasks([]);
     setActiveHistoryId(null);
     setChatMessages([]);
@@ -1342,7 +1346,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                     <button
                       type="button"
                       className="geminiHistoryClearAllBtn"
-                      onClick={handleClearAllTasks}
+                      onClick={() => setDeleteConfirmModal({ type: "all" })}
                       title="Permanently delete all command history"
                     >
                       Clear all
@@ -1391,7 +1395,11 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                           className="geminiHistoryDeleteBtn"
                           onClick={e => {
                             e.stopPropagation();
-                            handleDeleteTask(t.id);
+                            setDeleteConfirmModal({
+                              type: "single",
+                              taskId: t.id,
+                              taskPrompt: t.prompt
+                            });
                           }}
                           title="Permanently delete from database"
                         >
@@ -1638,6 +1646,86 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
               </div>
             )}
             </div> {/* End geminiMainCanvas */}
+
+            {/* In-App Confirmation Popup Modal (Zero Native Alerts) */}
+            {deleteConfirmModal && (
+              <div className="modalBackdrop" onClick={() => setDeleteConfirmModal(null)}>
+                <div
+                  className="modalBox"
+                  style={{
+                    maxWidth: "420px",
+                    borderRadius: "16px",
+                    padding: "24px",
+                    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)"
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div style={{ display: "flex", gap: "14px", alignItems: "flex-start", marginBottom: "18px" }}>
+                    <div
+                      style={{
+                        width: "42px",
+                        height: "42px",
+                        borderRadius: "50%",
+                        background: "rgba(239, 68, 68, 0.12)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#ef4444",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Trash2 size={20} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: "600", color: theme === "dark" ? "#f8fafc" : "#0f172a" }}>
+                        {deleteConfirmModal.type === "all" ? "Clear all command history?" : "Delete command?"}
+                      </h3>
+                      <p style={{ margin: 0, fontSize: "13px", lineHeight: "1.5", color: theme === "dark" ? "#94a3b8" : "#64748b" }}>
+                        {deleteConfirmModal.type === "all"
+                          ? "This will permanently remove all past session records from the database. This action cannot be undone."
+                          : `Are you sure you want to permanently delete "${deleteConfirmModal.taskPrompt || "this command"}"? This action cannot be undone.`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
+                    <button
+                      type="button"
+                      className="btn btnSecondary"
+                      onClick={() => setDeleteConfirmModal(null)}
+                      style={{ padding: "8px 16px", fontSize: "13px", borderRadius: "8px" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btnDanger"
+                      onClick={async () => {
+                        const modal = deleteConfirmModal;
+                        setDeleteConfirmModal(null);
+                        if (modal.type === "all") {
+                          await executeClearAllTasks();
+                        } else if (modal.taskId) {
+                          await handleDeleteTask(modal.taskId);
+                        }
+                      }}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        borderRadius: "8px",
+                        background: "#ef4444",
+                        color: "#ffffff",
+                        border: "none",
+                        fontWeight: "500",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {deleteConfirmModal.type === "all" ? "Clear All" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Quick Connect Website Modal */}
             {showQuickAddModal && (
