@@ -5,13 +5,23 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertSafeHttpUrl } from "./security/url-policy.js";
+import { planActions } from "./ai/groq-planner.js";
+import { executePlan } from "./executor/action-executor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(express.json({ limit: "32kb" }));
 const port = Number(process.env.PORT ?? 3001);
-const InspectSchema = z.object({ url: z.string().url(), task: z.string().min(1).max(2000) });
+
+const InspectSchema = z.object({
+  url: z.string().url(),
+  task: z.string().min(1).max(2000),
+  credentials: z.object({
+    username: z.string().optional(),
+    password: z.string().optional()
+  }).optional()
+});
 
 app.get("/health", (_req, res) => res.json({ status: "ok", service: "browser-worker" }));
 
@@ -58,43 +68,51 @@ app.post("/v1/inspect", async (req, res) => {
     page.setDefaultTimeout(20000);
     await page.goto(destinationUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    // Allow client-side SPA hydration (Canva React bundle)
-    await page.waitForTimeout(5000);
+    // Allow client-side SPA hydration
+    await page.waitForTimeout(3000);
 
-    const title = await page.title();
+    // 1. Generate Action Plan via Groq LLM (with heuristic fallback)
+    const plan = await planActions({
+      task: parsed.data.task,
+      url: destinationUrl,
+      credentials: parsed.data.credentials
+    });
+
+    // 2. Execute Planned Actions with Playwright
+    const execution = await executePlan(page, plan.actions, {
+      credentials: parsed.data.credentials
+    });
+
+    const title = await page.title().catch(() => "");
     const currentUrl = page.url();
-    const pageText = (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).slice(0, 12000);
+    const pageText = (await page.locator("body").innerText({ timeout: 4000 }).catch(() => "")).slice(0, 12000);
 
-    // Prioritize extracting design links if available
-    const designElements = await page.locator("a[href*='/design/']").evaluateAll(els => els.map(el => ({
-      text: (el.textContent ?? "").trim().slice(0, 120) || (el.getAttribute("aria-label") ?? "Untitled Design"),
-      href: (el as HTMLAnchorElement).href
-    })));
-
-    const generalLinks = await page.locator("a:visible").evaluateAll(els => els.slice(0, 40).map(el => ({
-      text: (el.textContent ?? "").trim().slice(0, 120) || (el.getAttribute("aria-label") ?? "Link"),
-      href: (el as HTMLAnchorElement).href
-    })));
-
-    const links = designElements.length > 0 ? designElements : generalLinks;
-
-    let screenshotBase64: string | undefined;
-    try {
-      const buffer = await page.screenshot({ type: "jpeg", quality: 50 });
-      screenshotBase64 = "data:image/jpeg;base64," + buffer.toString("base64");
-    } catch (_) {}
+    // Format links for compatibility
+    const links = execution.extractedData.map(item => ({
+      text: item.title,
+      href: item.href || currentUrl
+    }));
 
     await context.close();
 
-    let summary = `Inspected "${title || currentUrl}". Found ${links.length} link(s) / design(s).`;
-    if (designElements.length > 0) {
-      const names = designElements.slice(0, 5).map(d => d.text || "Untitled").join(", ");
-      summary = `Successfully retrieved ${designElements.length} Canva design(s) from your account: [${names}]. Direct links extracted to CSV.`;
-    }
+    const summary = `${plan.explanation} (${execution.actions.length} action(s) executed). ${execution.extractedData.length} records extracted.`;
 
     return res.json({
       summary,
-      page: { title, url: currentUrl, text: pageText, links, screenshot: screenshotBase64 }
+      plan: {
+        engine: plan.engine,
+        explanation: plan.explanation,
+        actions: plan.actions
+      },
+      executionLogs: execution.actions,
+      extractedRecords: execution.extractedData,
+      page: {
+        title,
+        url: currentUrl,
+        text: pageText,
+        links,
+        screenshot: execution.screenshotBase64
+      }
     });
   } catch (error) {
     return res.status(422).json({ error: error instanceof Error ? error.message : "Inspection failed" });

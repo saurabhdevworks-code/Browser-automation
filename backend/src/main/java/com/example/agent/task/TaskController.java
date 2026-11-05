@@ -49,11 +49,47 @@ public class TaskController {
             Object summary = result.get("summary");
             task.update("COMPLETED", summary == null ? "Inspection completed" : String.valueOf(summary), null);
 
-            actions.save(new AgentAction(task.getId(), "PAGE_INSPECTION", "Page inspected successfully; verified read-only execution", "COMPLETED"));
+            // Record dynamic execution steps returned by AI Action Planner & Executor
+            if (result.containsKey("executionLogs")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> logs = (List<Map<String, Object>>) result.get("executionLogs");
+                for (Map<String, Object> log : logs) {
+                    String actionType = String.valueOf(log.getOrDefault("type", "BROWSER_ACTION"));
+                    String desc = String.valueOf(log.getOrDefault("description", "Executed step"));
+                    String stepStatus = String.valueOf(log.getOrDefault("status", "COMPLETED"));
+                    actions.save(new AgentAction(task.getId(), actionType, desc, stepStatus));
+                }
+            } else {
+                actions.save(new AgentAction(task.getId(), "PAGE_INSPECTION", "Page inspected successfully; verified read-only execution", "COMPLETED"));
+            }
+
             actions.save(new AgentAction(task.getId(), "VERIFICATION", "Outcome verified against original user prompt", "COMPLETED"));
 
-            // If page details are present, auto-generate report file
-            if (result.containsKey("page")) {
+            // Check if structured records were extracted
+            if (result.containsKey("extractedRecords")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> records = (List<Map<String, Object>>) result.get("extractedRecords");
+                if (records != null && !records.isEmpty()) {
+                    StringBuilder csv = new StringBuilder();
+                    csv.append("Item_Number,Title,URL,Category,Extracted_At\n");
+                    int idx = 1;
+                    for (Map<String, Object> rec : records) {
+                        csv.append(idx++).append(",")
+                           .append("\"").append(String.valueOf(rec.getOrDefault("title", "")).replace("\"", "\"\"")).append("\",")
+                           .append("\"").append(String.valueOf(rec.getOrDefault("href", "")).replace("\"", "\"\"")).append("\",")
+                           .append("\"").append(String.valueOf(rec.getOrDefault("category", "General")).replace("\"", "\"\"")).append("\",")
+                           .append(new Date()).append("\n");
+                    }
+                    files.save(new GeneratedFile(
+                        task.getId(),
+                        "extracted-data-" + connection.getName().toLowerCase().replaceAll("\\s+", "-") + ".csv",
+                        "CSV",
+                        records.size(),
+                        csv.length() > 300 ? csv.substring(0, 300) + "..." : csv.toString(),
+                        csv.toString()
+                    ));
+                }
+            } else if (result.containsKey("page")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> pageData = (Map<String, Object>) result.get("page");
                 @SuppressWarnings("unchecked")
