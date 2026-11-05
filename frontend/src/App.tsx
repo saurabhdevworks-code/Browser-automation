@@ -70,6 +70,22 @@ export default function App() {
   const [expandedTraceTaskId, setExpandedTraceTaskId] = useState<string | null>(null);
   const [taskTraceCache, setTaskTraceCache] = useState<Record<string, Action[]>>({});
   const geminiTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close plus popover menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        setShowPlusMenu(false);
+      }
+    }
+    if (showPlusMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showPlusMenu]);
 
   function showToast(message: string, type: "success" | "error" | "info" = "info") {
     const id = Math.random().toString(36).substring(2, 9);
@@ -338,13 +354,36 @@ export default function App() {
       setShowMentionDropdown(false);
       setSelectedTarget(data.id);
       setSelectedConnId(data.id);
+      setGeminiPrompt(prev => {
+        const cleaned = prev.trim().replace(/^@[a-zA-Z0-9_\-\.]+\s*/, "");
+        return cleaned ? `@${data.name} ${cleaned}` : `@${data.name} `;
+      });
       await loadData();
       showToast(`Website "${data.name}" registered & targeted!`, "success");
+      setTimeout(() => {
+        geminiTextareaRef.current?.focus();
+      }, 50);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Connection failed", "error");
     } finally {
       setBusy(false);
     }
+  }
+
+  function selectPlatformFromMenu(targetId: string, label: string) {
+    setSelectedTarget(targetId);
+    setShowPlusMenu(false);
+
+    // Update input box to show the chosen platform
+    setGeminiPrompt(prev => {
+      const trimmed = prev.trim();
+      const cleaned = trimmed.replace(/^@[a-zA-Z0-9_\-\.]+\s*/, "");
+      return cleaned ? `@${label} ${cleaned}` : `@${label} `;
+    });
+
+    setTimeout(() => {
+      geminiTextareaRef.current?.focus();
+    }, 50);
   }
 
   // Handle typing in the Gemini prompt textarea with @ mention trigger
@@ -492,11 +531,10 @@ export default function App() {
   }
 
   function renderGeminiInputCapsule() {
-    const activeConn = connections.find(c => c.id === selectedTarget);
     return (
       <div className="geminiPillCapsule">
         {/* Left Plus / Close Menu Button */}
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative" }} ref={plusMenuRef}>
           <button
             type="button"
             className={`geminiPlusCircleBtn ${showPlusMenu ? "active" : ""}`}
@@ -513,10 +551,7 @@ export default function App() {
 
               <div
                 className={`geminiPlusMenuItem ${selectedTarget === "all" ? "selected" : ""}`}
-                onClick={() => {
-                  setSelectedTarget("all");
-                  setShowPlusMenu(false);
-                }}
+                onClick={() => selectPlatformFromMenu("all", "all")}
               >
                 <div className="geminiPlusMenuIcon allIcon">
                   <Globe2 size={16} />
@@ -551,10 +586,7 @@ export default function App() {
                     <div
                       key={c.id}
                       className={`geminiPlusMenuItem ${selectedTarget === c.id ? "selected" : ""}`}
-                      onClick={() => {
-                        setSelectedTarget(c.id);
-                        setShowPlusMenu(false);
-                      }}
+                      onClick={() => selectPlatformFromMenu(c.id, c.name)}
                     >
                       <div className="geminiPlusMenuIcon">
                         <Bot size={16} />
