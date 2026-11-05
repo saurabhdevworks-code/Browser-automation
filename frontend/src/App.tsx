@@ -129,6 +129,15 @@ function HistoryDocClockIcon({
   );
 }
 
+function normalizeWebUrl(url: string): string {
+  if (!url) return "";
+  let clean = url.trim().toLowerCase();
+  clean = clean.replace(/^https?:\/\//, "");
+  clean = clean.replace(/^www\./, "");
+  clean = clean.replace(/\/+$/, "");
+  return clean;
+}
+
 // Formatted Markdown renderer for Gemini-style clean typography
 function FormattedMarkdown({ content }: { content?: string }) {
   if (!content) return null;
@@ -646,12 +655,26 @@ export default function App() {
 
   async function handleAddConnection(e: React.FormEvent) {
     e.preventDefault();
+    if (!newConnName.trim() || !newConnUrl.trim()) return;
+
+    const normUrl = normalizeWebUrl(newConnUrl);
+    const normName = newConnName.trim().toLowerCase();
+    const existing = connections.find(c => 
+      normalizeWebUrl(c.websiteUrl) === normUrl || 
+      c.name.trim().toLowerCase() === normName
+    );
+
+    if (existing) {
+      showToast(`Website "${existing.name}" (${existing.websiteUrl}) is already registered! Duplicate websites are not allowed.`, "error");
+      return;
+    }
+
     setBusy(true);
     try {
       const r = await fetch(`${API}/connections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newConnName, websiteUrl: newConnUrl })
+        body: JSON.stringify({ name: newConnName.trim(), websiteUrl: newConnUrl.trim() })
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Failed to add website connection");
@@ -698,6 +721,32 @@ export default function App() {
       showToast("Please provide both a Name and URL for the website.", "error");
       return;
     }
+
+    const normUrl = normalizeWebUrl(quickConnUrl);
+    const normName = quickConnName.trim().toLowerCase();
+    const existing = connections.find(c => 
+      normalizeWebUrl(c.websiteUrl) === normUrl || 
+      c.name.trim().toLowerCase() === normName
+    );
+
+    if (existing) {
+      showToast(`Website "${existing.name}" is already connected! Selected existing connection.`, "info");
+      setSelectedTarget(existing.id);
+      setSelectedConnId(existing.id);
+      setGeminiPrompt(prev => {
+        const cleaned = prev.trim().replace(/^@[a-zA-Z0-9_\-\.]+\s*/, "");
+        return cleaned ? `@${existing.name} ${cleaned}` : `@${existing.name} `;
+      });
+      setShowQuickAddModal(false);
+      setShowMentionDropdown(false);
+      setQuickConnName("");
+      setQuickConnUrl("");
+      setTimeout(() => {
+        geminiTextareaRef.current?.focus();
+      }, 50);
+      return;
+    }
+
     setBusy(true);
     try {
       const r = await fetch(`${API}/connections`, {

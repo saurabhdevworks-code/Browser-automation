@@ -19,11 +19,35 @@ public class ConnectionController {
   this.taskRepository=taskRepository;
  }
  public record CreateConnection(@NotBlank @Size(max=160) String name,@NotBlank @Size(max=2048) String websiteUrl){}
- @PostMapping public ResponseEntity<WebsiteConnection> create(@Valid @RequestBody CreateConnection request) {
+ @PostMapping public ResponseEntity<?> create(@Valid @RequestBody CreateConnection request) {
   URI uri=URI.create(request.websiteUrl());
   if (!List.of("http","https").contains(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null)
    throw new IllegalArgumentException("Only absolute HTTP/HTTPS URLs without embedded credentials are accepted.");
+
+  String normalizedIncoming = normalizeUrl(uri.toString());
+  String incomingName = request.name().trim();
+
+  for (var existing : repository.findAll()) {
+   if (existing.getName().trim().equalsIgnoreCase(incomingName)) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+     .body(Map.of("error", "A connection with name '" + existing.getName() + "' is already registered."));
+   }
+   if (normalizeUrl(existing.getWebsiteUrl()).equalsIgnoreCase(normalizedIncoming)) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+     .body(Map.of("error", "Website '" + existing.getName() + "' (" + existing.getWebsiteUrl() + ") is already connected. Duplicate websites are not allowed."));
+   }
+  }
+
   return ResponseEntity.status(HttpStatus.CREATED).body(repository.save(new WebsiteConnection(request.name(),uri.toString())));
+ }
+
+ private static String normalizeUrl(String url) {
+  if (url == null) return "";
+  String clean = url.trim().toLowerCase();
+  clean = clean.replaceFirst("^https?://", "");
+  clean = clean.replaceFirst("^www\\.", "");
+  clean = clean.replaceAll("/+$", "");
+  return clean;
  }
  @GetMapping public List<WebsiteConnection> list(){return repository.findAll();}
 
