@@ -1217,6 +1217,15 @@ header.topBar p {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
+/* Gemini Dashboard Screen Wrapper (Flex Row for Box 2 History + Box 3 Canvas) */
+.geminiScreenWrapper {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
 .geminiScreenWrapper.lightTheme {
   background: #ffffff;
   color: #0f172a;
@@ -1387,77 +1396,87 @@ header.topBar p {
   background: transparent;
 }
 
-/* Top-Left Red Box Area: Gemini History Icon Button */
-.geminiHistoryToggleBtn {
-  position: absolute;
-  top: 16px;
-  left: 20px;
-  z-index: 50;
-  width: 36px;
-  height: 36px;
+/* Box 2 (Column 2): History Panel (Sits right next to Box 1 Main Sidebar) */
+.geminiHistoryPanel {
+  width: 260px;
+  height: 100vh;
+  background: #090e1a;
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 12px;
+  flex-shrink: 0;
+  z-index: 10;
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+.geminiScreenWrapper.lightTheme .geminiHistoryPanel {
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+}
+.geminiHistoryPanelTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.geminiPanelToggleBtn {
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.85);
-  color: #cbd5e1;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
   display: grid;
   place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.geminiPanelToggleBtn:hover {
+  background: rgba(148, 163, 184, 0.15);
+  color: #ffffff;
+}
+.geminiHistoryOpenBtn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 40;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   backdrop-filter: blur(8px);
 }
-.geminiHistoryToggleBtn:hover {
+.geminiHistoryOpenBtn:hover {
   background: rgba(30, 41, 59, 0.95);
   border-color: rgba(96, 165, 250, 0.4);
   color: #60a5fa;
-  transform: scale(1.06);
 }
-.geminiScreenWrapper.lightTheme .geminiHistoryToggleBtn {
+.geminiScreenWrapper.lightTheme .geminiHistoryOpenBtn {
   background: #ffffff;
   border: 1px solid #cbd5e1;
   color: #334155;
 }
 
-/* Gemini Slide-out History Drawer */
-.geminiHistoryDrawerOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(3px);
-  z-index: 100;
-  animation: fadeIn 0.15s ease;
-}
-.geminiHistoryDrawer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 290px;
-  background: #0f172a;
-  border-right: 1px solid rgba(148, 163, 184, 0.15);
-  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.55);
-  z-index: 101;
+/* Box 3 (Column 3): Main Canvas Area */
+.geminiMainCanvas {
+  flex: 1;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 16px 14px 20px;
-  animation: slideInLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.geminiScreenWrapper.lightTheme .geminiHistoryDrawer {
-  background: #ffffff;
-  border-right: 1px solid #e2e8f0;
-  box-shadow: 8px 0 28px rgba(0, 0, 0, 0.08);
-}
-.geminiHistoryDrawerTop {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-@keyframes slideInLeft {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 /* Unified Global Theme Toggle Button for ALL pages (Icon-only circle) */
