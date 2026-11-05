@@ -1408,10 +1408,9 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 type="button"
                 className="geminiHistoryOpenBtn"
                 onClick={() => setHistoryPanelOpen(true)}
-                title="Open command history"
+                title="History"
               >
                 <HistoryDocClockIcon size={18} />
-                <span>History</span>
               </button>
             )}
 
