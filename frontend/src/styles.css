@@ -814,7 +814,7 @@ header.topBar p {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px 20px 80px;
+  padding: 10px 20px 60px;
   text-align: center;
 }
 
@@ -823,7 +823,7 @@ header.topBar p {
   font-size: 38px;
   font-weight: 500;
   color: #1e293b;
-  margin: 0 0 28px 0;
+  margin: 0 0 18px 0;
   letter-spacing: -0.5px;
 }
 
@@ -874,27 +874,6 @@ header.topBar p {
   color: #7c3aed;
 }
 
-.geminiCapsuleScopeBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 10px;
-  background: #f5f3ff;
-  color: #7c3aed;
-  border: 1px solid #ddd6fe;
-  cursor: pointer;
-  flex-shrink: 0;
-  user-select: none;
-}
-.geminiCapsuleScopeBadge.isAll {
-  background: #ecfdf5;
-  color: #065f46;
-  border-color: #a7f3d0;
-}
-
 .geminiCapsuleInput {
   flex: 1;
   border: none;
@@ -905,7 +884,7 @@ header.topBar p {
   color: #0f172a;
   resize: none;
   line-height: 1.4;
-  padding: 6px 4px;
+  padding: 8px 6px;
   min-height: 24px;
 }
 .geminiCapsuleInput::placeholder {
@@ -938,31 +917,39 @@ header.topBar p {
 /* Plus Popover Menu (Matching Image 1 in White Theme) */
 .geminiPlusMenuDropdown {
   position: absolute;
-  bottom: calc(100% + 12px);
   left: 0;
-  width: 300px;
+  width: 270px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
-  padding: 8px;
+  border-radius: 16px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.09), 0 2px 8px rgba(0, 0, 0, 0.03);
+  padding: 6px;
   z-index: 100;
   text-align: left;
   animation: fadeIn 0.15s ease;
 }
+.geminiPlusMenuDropdown.openDown {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+.geminiPlusMenuDropdown.openUp {
+  bottom: calc(100% + 8px);
+  top: auto;
+}
+
 .geminiPlusMenuSectionTitle {
   font-size: 10px;
   font-weight: 700;
   color: #94a3b8;
   letter-spacing: 0.8px;
-  padding: 6px 10px 4px;
+  padding: 5px 8px 3px;
 }
 .geminiPlusMenuItem {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 0.1s ease;
 }
@@ -973,8 +960,8 @@ header.topBar p {
   background: #f5f3ff;
 }
 .geminiPlusMenuIcon {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 6px;
   background: #f1f5f9;
   color: #64748b;
@@ -992,18 +979,18 @@ header.topBar p {
 }
 .geminiPlusMenuItem b {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   color: #0f172a;
 }
 .geminiPlusMenuItem small {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
 }
 .geminiPlusMenuDivider {
   height: 1px;
   background: #f1f5f9;
-  margin: 6px 0;
+  margin: 4px 0;
 }
 
 /* Chat Active Stage (Bottom Docked Input Mode) */

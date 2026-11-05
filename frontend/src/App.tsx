@@ -508,7 +508,7 @@ export default function App() {
 
           {/* Plus Popover Menu (Matching Image 1 in White Theme) */}
           {showPlusMenu && (
-            <div className="geminiPlusMenuDropdown">
+            <div className={`geminiPlusMenuDropdown ${conversationStarted ? "openUp" : "openDown"}`}>
               <div className="geminiPlusMenuSectionTitle">TARGET PLATFORM</div>
 
               <div
@@ -571,25 +571,6 @@ export default function App() {
                 </>
               )}
             </div>
-          )}
-        </div>
-
-        {/* Scope Tag Pill inside the capsule */}
-        <div
-          className={`geminiCapsuleScopeBadge ${selectedTarget === "all" ? "isAll" : ""}`}
-          onClick={() => setShowPlusMenu(prev => !prev)}
-          title="Click to switch target platform"
-        >
-          {selectedTarget === "all" ? (
-            <>
-              <Globe2 size={12} />
-              <span>@all</span>
-            </>
-          ) : (
-            <>
-              <Zap size={12} />
-              <span>@{activeConn?.name || "website"}</span>
-            </>
           )}
         </div>
 
