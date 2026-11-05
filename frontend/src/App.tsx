@@ -91,7 +91,7 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [geminiPrompt, setGeminiPrompt] = useState("");
-  const [selectedTarget, setSelectedTarget] = useState<string>("all"); // "all" or connection.id
+  const [selectedTarget, setSelectedTarget] = useState<string>(""); // "" (none/general), "all", or connection.id
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
@@ -499,15 +499,20 @@ export default function App() {
   }
 
   function selectPlatformFromMenu(targetId: string, label: string) {
-    setSelectedTarget(targetId);
+    if (selectedTarget === targetId) {
+      // Toggle off if already selected
+      setSelectedTarget("");
+      setGeminiPrompt(prev => prev.trim().replace(/^@[a-zA-Z0-9_\-\.]+\s*/, ""));
+    } else {
+      setSelectedTarget(targetId);
+      // Update input box to show the chosen platform
+      setGeminiPrompt(prev => {
+        const trimmed = prev.trim();
+        const cleaned = trimmed.replace(/^@[a-zA-Z0-9_\-\.]+\s*/, "");
+        return cleaned ? `@${label} ${cleaned}` : `@${label} `;
+      });
+    }
     setShowPlusMenu(false);
-
-    // Update input box to show the chosen platform
-    setGeminiPrompt(prev => {
-      const trimmed = prev.trim();
-      const cleaned = trimmed.replace(/^@[a-zA-Z0-9_\-\.]+\s*/, "");
-      return cleaned ? `@${label} ${cleaned}` : `@${label} `;
-    });
 
     setTimeout(() => {
       geminiTextareaRef.current?.focus();
@@ -518,6 +523,11 @@ export default function App() {
   function handleGeminiPromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value;
     setGeminiPrompt(val);
+
+    // If user cleared or typed without @, clear selectedTarget so it never defaults to @all
+    if (!val.trim().startsWith("@")) {
+      setSelectedTarget("");
+    }
 
     const cursorPos = e.target.selectionStart;
     const textBeforeCursor = val.slice(0, cursorPos);
@@ -576,8 +586,8 @@ export default function App() {
       return;
     }
 
-    // Determine target: check query for @all or @websiteName, or targetOverride, or selectedTarget
-    let resolvedTarget = targetOverride || selectedTarget;
+    // Determine target: check query for explicit @all or @websiteName, then targetOverride, then selectedTarget
+    let resolvedTarget = "";
 
     if (/@all\b/i.test(rawPrompt)) {
       resolvedTarget = "all";
@@ -592,10 +602,19 @@ export default function App() {
       }
     }
 
+    // Only fallback to targetOverride or selectedTarget if the user didn't write an explicit mention
+    if (!resolvedTarget) {
+      if (targetOverride) {
+        resolvedTarget = targetOverride;
+      } else if (selectedTarget) {
+        resolvedTarget = selectedTarget;
+      }
+    }
+
     const isScheduleReq = /\b(schedule|recurring|every|daily|weekly|hourly|cron)\b/i.test(rawPrompt);
     const userMsgId = "user-" + Date.now();
     const assistMsgId = "asst-" + Date.now();
-    const targetLabel = resolvedTarget === "all" ? "all" : (connections.find(c => c.id === resolvedTarget)?.name || "target");
+    const targetLabel = resolvedTarget === "all" ? "all" : (connections.find(c => c.id === resolvedTarget)?.name || "");
 
     setConversationStarted(true);
     setShowPlusMenu(false);
@@ -619,12 +638,52 @@ export default function App() {
       status: "THINKING",
       content: isScheduleReq
         ? "Configuring recurring automation schedule and initializing browser verification..."
-        : "Observing browser context, verifying URL safety policies, and executing automation plan...",
+        : (resolvedTarget
+            ? `Observing browser context on ${targetLabel}, verifying URL safety policies, and executing automation plan...`
+            : "Processing query..."),
       createdAt: new Date().toISOString()
     };
 
     setChatMessages(prev => [...prev, newUserMsg, newAssistMsg]);
     setGeminiPrompt("");
+
+    // If NO target platform was specified (User just typed "hy", asked a question, or general query)
+    if (!resolvedTarget) {
+      const isGreeting = /^(hi|hy|hello|hey|hola|namaste|yo|good\s*(morning|evening|afternoon)|who\s*are\s*you|what\s*can\s*you\s*do|help)\b/i.test(rawPrompt);
+      setTimeout(() => {
+        setChatMessages(prev => prev.map(m => {
+          if (m.id === assistMsgId) {
+            if (isGreeting) {
+              return {
+                ...m,
+                status: "COMPLETED",
+                content: `Hello! I am your Universal Browser AI Agent.
+
+I can automate web actions, navigate portals, auto-fill credentials, and extract data.
+
+**How to give tasks:**
+• **Target a specific website:** Type \`@<name> <task>\` (e.g. \`@canva open designs\`) or click \`+\` to pick a platform.
+• **Broadcast to all websites:** Type \`@all <task>\` to run across all registered portals simultaneously.
+• **Direct URL:** Mention any URL (e.g. \`https://google.com search developer jobs\`).`
+              };
+            } else {
+              return {
+                ...m,
+                status: "COMPLETED",
+                content: `Instruction received: "${rawPrompt}".
+
+Please specify which website you want me to execute this on:
+${connections.length > 0 ? connections.map(c => `• **@${c.name}** (${c.websiteUrl})`).join("\n") : "• No websites connected yet — click '+' to connect one."}
+
+You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast across all platforms.`
+              };
+            }
+          }
+          return m;
+        }));
+      }, 400);
+      return;
+    }
 
     if (resolvedTarget === "all") {
       if (connections.length === 0) {
@@ -675,14 +734,11 @@ export default function App() {
       }
     } else {
       // Single connection execution
-      let targetConn = connections.find(c => c.id === resolvedTarget);
-      if (!targetConn && connections.length > 0) {
-        targetConn = connections[0];
-      }
+      const targetConn = connections.find(c => c.id === resolvedTarget);
       if (!targetConn) {
-        showToast("No target website available. Please connect a website first.", "error");
+        showToast("Target website not found. Please select a valid connection.", "error");
         setShowQuickAddModal(true);
-        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: "No target website available. Please connect a website first." } : m));
+        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: "Target website not found. Please connect a website first." } : m));
         return;
       }
 
@@ -850,7 +906,7 @@ export default function App() {
           className="geminiCapsuleInput"
           rows={1}
           value={geminiPrompt}
-          onChange={e => setGeminiPrompt(e.target.value)}
+          onChange={handleGeminiPromptChange}
           onKeyDown={e => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -1061,6 +1117,7 @@ export default function App() {
                     onClick={() => {
                       setConversationStarted(false);
                       setGeminiPrompt("");
+                      setSelectedTarget("");
                       setShowPlusMenu(false);
                     }}
                   >
@@ -1077,7 +1134,7 @@ export default function App() {
                           <div key={m.id} className="geminiUserMessage">
                             <div className="geminiUserBubble">
                               <div className="geminiUserBubbleHead">
-                                <span className="geminiTargetTag">@{m.targetName}</span>
+                                {m.targetName ? <span className="geminiTargetTag">@{m.targetName}</span> : null}
                                 <small style={{ fontSize: "10px", color: "#64748b" }}>
                                   {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </small>
@@ -1098,9 +1155,11 @@ export default function App() {
                               <div className="geminiAgentTitle">
                                 <Bot size={15} color="#6366f1" />
                                 <span>Universal Agent</span>
-                                <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "12px" }}>
-                                  • {m.targetName}
-                                </span>
+                                {m.targetName ? (
+                                  <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "12px" }}>
+                                    • @{m.targetName}
+                                  </span>
+                                ) : null}
                               </div>
                               <span className={`tag ${m.status === "COMPLETED" ? "tagGreen" : m.status === "FAILED" ? "tagRed" : "tagBlue"}`}>
                                 {m.status}
