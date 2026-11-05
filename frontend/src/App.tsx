@@ -633,39 +633,42 @@ export default function App() {
         {/* TAB 1: DASHBOARD (GEMINI COMMAND CENTER) */}
         {activeTab === "dashboard" && (
           <div className="geminiWrapper">
-            {/* Gemini Hero Section */}
-            <div className="geminiHero">
-              <div className="geminiSparkleLogo">
-                <Sparkles size={28} />
+            <div className="geminiTopSection">
+              {/* Gemini Hero Section */}
+              <div className="geminiHero">
+                <div className="geminiSparkleLogo">
+                  <Sparkles size={28} />
+                </div>
+                <h1 className="geminiTitle">AI Command Center</h1>
+                <p className="geminiSubtitle">
+                  One AI Agent. One Command Interface. Natural-Language Digital Execution.
+                </p>
               </div>
-              <h1 className="geminiTitle">AI Command Center</h1>
-              <p className="geminiSubtitle">
-                One AI Agent. One Command Interface. Natural-Language Digital Execution.
-              </p>
+
+              {/* Quick Metrics Ribbon */}
+              <div className="geminiRibbon">
+                <div className="geminiRibbonItem">
+                  <Globe2 size={14} color="#0284c7" />
+                  <span>Authorized Websites: <b>{connections.length}</b></span>
+                </div>
+                <div className="geminiRibbonItem">
+                  <Activity size={14} color="#8b5cf6" />
+                  <span>Agent Cycles: <b>{tasks.length}</b></span>
+                </div>
+                <div className="geminiRibbonItem">
+                  <ShieldCheck size={14} color={pendingApprovalsCount > 0 ? "#ef4444" : "#10b981"} />
+                  <span>Approvals: <b>{pendingApprovalsCount}</b></span>
+                </div>
+                <div className="geminiRibbonItem">
+                  <FileSpreadsheet size={14} color="#059669" />
+                  <span>Reports Generated: <b>{files.length}</b></span>
+                </div>
+              </div>
             </div>
 
-            {/* Quick Metrics Ribbon */}
-            <div className="geminiRibbon">
-              <div className="geminiRibbonItem">
-                <Globe2 size={14} color="#0284c7" />
-                <span>Authorized Websites: <b>{connections.length}</b></span>
-              </div>
-              <div className="geminiRibbonItem">
-                <Activity size={14} color="#8b5cf6" />
-                <span>Agent Cycles: <b>{tasks.length}</b></span>
-              </div>
-              <div className="geminiRibbonItem">
-                <ShieldCheck size={14} color={pendingApprovalsCount > 0 ? "#ef4444" : "#10b981"} />
-                <span>Approvals: <b>{pendingApprovalsCount}</b></span>
-              </div>
-              <div className="geminiRibbonItem">
-                <FileSpreadsheet size={14} color="#059669" />
-                <span>Reports Generated: <b>{files.length}</b></span>
-              </div>
-            </div>
-
-            {/* Gemini Command Input Capsule */}
-            <div className="geminiInputContainer">
+            {/* Shifted down & Expanded Input Capsule (Red Marked Area) */}
+            <div className="geminiBottomSection">
+              <div className="geminiInputContainer">
               {/* Target & Scope Indicator Bar */}
               <div className="geminiTargetPillBar">
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -839,6 +842,7 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
 
             {/* Quick Connect Website Modal */}
             {showQuickAddModal && (
