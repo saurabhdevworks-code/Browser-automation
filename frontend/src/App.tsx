@@ -69,6 +69,66 @@ type ChatMessage = {
   createdAt: string;
 };
 
+// Custom SVG Icon matching exact document history clock design
+function HistoryDocClockIcon({
+  size = 18,
+  className = "",
+  style
+}: {
+  size?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const maskId = React.useId();
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="currentColor"
+      className={className}
+      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }}
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect width="100" height="100" fill="#ffffff" />
+          {/* 3 Document Text Lines */}
+          <rect x="38" y="27" width="36" height="7.5" rx="3.75" fill="#000000" />
+          <rect x="38" y="43" width="36" height="7.5" rx="3.75" fill="#000000" />
+          <rect x="52" y="59" width="22" height="7.5" rx="3.75" fill="#000000" />
+          {/* Moat separating clock badge from main document */}
+          <circle cx="29" cy="73" r="26" fill="#000000" />
+          {/* Re-include clock face in mask */}
+          <circle cx="29" cy="73" r="19.5" fill="#ffffff" />
+          {/* Clock hands cutout */}
+          <path
+            d="M29 60.5 V73.5 H39.5"
+            stroke="#000000"
+            strokeWidth="5.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </mask>
+      </defs>
+      <rect
+        x="21"
+        y="10"
+        width="67"
+        height="80"
+        rx="18"
+        mask={`url(#${maskId})`}
+      />
+      <circle
+        cx="29"
+        cy="73"
+        r="19.5"
+        mask={`url(#${maskId})`}
+      />
+    </svg>
+  );
+}
+
 // Formatted Markdown renderer for Gemini-style clean typography
 function FormattedMarkdown({ content }: { content?: string }) {
   if (!content) return null;
@@ -1274,7 +1334,10 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 </div>
 
                 <div className="geminiHistoryLabel">
-                  <span>Recent</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <HistoryDocClockIcon size={14} />
+                    <span>Recent</span>
+                  </div>
                   {tasks.length > 0 && (
                     <button
                       type="button"
@@ -1321,7 +1384,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                         }}
                         title={t.prompt}
                       >
-                        <MessageSquare size={15} className="geminiHistoryIcon" />
+                        <HistoryDocClockIcon size={15} className="geminiHistoryIcon" />
                         <span className="geminiHistoryText">{t.prompt}</span>
                         <button
                           type="button"
@@ -1347,7 +1410,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 onClick={() => setHistoryPanelOpen(true)}
                 title="Open command history"
               >
-                <Clock size={16} />
+                <HistoryDocClockIcon size={18} />
                 <span>History</span>
               </button>
             )}
@@ -1370,8 +1433,20 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 <div className="geminiChatStage">
                   {/* Chat Top Header */}
                   <div className="geminiChatTopBar">
-                    <div className="geminiChatIconOnly" title="AI Command Center">
-                      <Sparkles size={20} className="geminiSparkleIcon" />
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      {!historyPanelOpen && (
+                        <button
+                          type="button"
+                          className="geminiTopBarIconBtn"
+                          onClick={() => setHistoryPanelOpen(true)}
+                          title="Open command history"
+                        >
+                          <HistoryDocClockIcon size={18} />
+                        </button>
+                      )}
+                      <div className="geminiChatIconOnly" title="AI Command Center">
+                        <Sparkles size={20} className="geminiSparkleIcon" />
+                      </div>
                     </div>
                     <button
                       type="button"
