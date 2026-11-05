@@ -1026,105 +1026,129 @@ header.topBar p {
 
 /* Gemini Dark Theme with Deep Midnight Blue Ambient Aura (Google Gemini style) */
 .geminiScreenWrapper.darkTheme {
-  background: radial-gradient(ellipse at 50% 46%, #1e3a8a 0%, #172554 26%, #0b152d 52%, #040915 78%, #020409 100%);
+  background: radial-gradient(ellipse at 50% 50%, #0b1730 0%, #070e20 40%, #030611 75%, #020308 100%);
   color: #f8fafc;
   position: relative;
   overflow: hidden;
 }
 .geminiScreenWrapper.darkTheme .geminiStartTitle {
-  color: #ffffff;
+  background: linear-gradient(180deg, #ffffff 30%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   font-weight: 500;
-  text-shadow: 0 0 45px rgba(96, 165, 250, 0.45), 0 2px 4px rgba(0, 0, 0, 0.5);
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
-/* Lighter, glowing capsule input box with ambient halo glow */
+/* Lighter, glowing capsule input box with ambient halo glow (Google Gemini style) */
 .geminiScreenWrapper.darkTheme .geminiPillCapsule {
-  background: rgba(30, 41, 59, 0.78);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(147, 197, 253, 0.35);
-  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.6), 0 0 38px rgba(59, 130, 246, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(39, 53, 78, 0.92) 0%, rgba(27, 37, 56, 0.95) 100%);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1.5px solid rgba(147, 197, 253, 0.48);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.65), 0 0 50px rgba(56, 189, 248, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.38);
   position: relative;
   z-index: 2;
 }
 .geminiScreenWrapper.darkTheme .geminiPillCapsule:hover {
-  background: rgba(30, 41, 59, 0.88);
-  border-color: rgba(147, 197, 253, 0.55);
-  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.65), 0 0 48px rgba(59, 130, 246, 0.42), inset 0 1px 2px rgba(255, 255, 255, 0.28);
+  background: linear-gradient(180deg, rgba(46, 62, 92, 0.95) 0%, rgba(32, 44, 66, 0.98) 100%);
+  border-color: rgba(147, 197, 253, 0.7);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.7), 0 0 60px rgba(56, 189, 248, 0.45), inset 0 1px 2px rgba(255, 255, 255, 0.48);
 }
 .geminiScreenWrapper.darkTheme .geminiPillCapsule:focus-within {
-  background: rgba(30, 41, 59, 0.95);
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.4), 0 12px 45px rgba(0, 0, 0, 0.7), 0 0 55px rgba(59, 130, 246, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.32);
+  background: linear-gradient(180deg, rgba(50, 68, 100, 0.98) 0%, rgba(36, 49, 74, 1) 100%);
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.45), 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 70px rgba(56, 189, 248, 0.55), inset 0 1px 2px rgba(255, 255, 255, 0.5);
 }
 .geminiScreenWrapper.darkTheme .geminiCapsuleInput {
   color: #ffffff;
 }
 .geminiScreenWrapper.darkTheme .geminiCapsuleInput::placeholder {
-  color: #94a3b8;
+  color: #cbd5e1;
   font-weight: 400;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusCircleBtn {
-  background: rgba(51, 65, 85, 0.88);
-  border: 1px solid rgba(147, 197, 253, 0.25);
-  color: #f1f5f9;
+  background: rgba(71, 85, 105, 0.9);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  color: #f8fafc;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusCircleBtn:hover {
-  background: #475569;
-  border-color: #60a5fa;
+  background: #64748b;
+  border-color: #93c5fd;
   color: #ffffff;
-  box-shadow: 0 0 14px rgba(96, 165, 250, 0.45);
+  box-shadow: 0 0 16px rgba(147, 197, 253, 0.5);
+}
+.geminiScreenWrapper.darkTheme .geminiPlusCircleBtn.active {
+  background: #3b82f6;
+  border-color: #93c5fd;
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.6);
+}
+.geminiScreenWrapper.darkTheme .geminiCapsuleSendBtn {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 55%, #ec4899 100%);
+  box-shadow: 0 4px 18px rgba(139, 92, 246, 0.55);
+}
+.geminiScreenWrapper.darkTheme .geminiCapsuleSendBtn:hover:not(:disabled) {
+  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.8);
+  transform: scale(1.08);
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuDropdown {
-  background: rgba(11, 20, 38, 0.96);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 30px rgba(37, 99, 235, 0.2);
+  background: rgba(13, 22, 40, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(147, 197, 253, 0.28);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 35px rgba(59, 130, 246, 0.25);
+  border-radius: 16px;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuSectionTitle {
-  color: #64748b;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem {
   border: 1px solid transparent;
+  border-radius: 8px;
+  transition: all 0.15s ease;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem:hover {
-  background: rgba(30, 41, 59, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(147, 197, 253, 0.2);
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem.selected {
-  background: rgba(30, 58, 138, 0.45);
-  border: 1px solid rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.22) !important;
+  border: 1px solid rgba(96, 165, 250, 0.5) !important;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem b {
-  color: #f8fafc;
+  color: #f1f5f9;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem small {
   color: #94a3b8;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem.selected b {
-  color: #ffffff;
+  color: #ffffff !important;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuItem.selected small {
-  color: #bfdbfe;
+  color: #93c5fd !important;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuIcon {
-  background: rgba(30, 41, 59, 0.85);
-  color: #94a3b8;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(30, 41, 59, 0.9);
+  color: #cbd5e1;
+  border: 1px solid rgba(147, 197, 253, 0.2);
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuIcon.allIcon {
-  background: rgba(6, 78, 59, 0.6);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuIcon.addIcon {
-  background: rgba(120, 53, 15, 0.6);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
 }
 .geminiScreenWrapper.darkTheme .geminiPlusMenuDivider {
-  background: rgba(59, 130, 246, 0.18);
+  background: rgba(147, 197, 253, 0.15);
 }
 .geminiScreenWrapper.darkTheme .tagGreen {
   background: rgba(6, 78, 59, 0.6);
@@ -1251,13 +1275,13 @@ header.topBar p {
 .geminiScreenWrapper.darkTheme .geminiCenterStage::before {
   content: '';
   position: absolute;
-  width: 820px;
-  height: 420px;
-  background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.32) 0%, rgba(37, 99, 235, 0.18) 38%, rgba(30, 58, 138, 0.08) 65%, transparent 100%);
+  width: 920px;
+  height: 380px;
+  background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.38) 0%, rgba(99, 102, 241, 0.28) 32%, rgba(59, 130, 246, 0.14) 60%, transparent 80%);
   pointer-events: none;
   z-index: 0;
-  filter: blur(50px);
-  transform: translateY(20px);
+  filter: blur(55px);
+  transform: translateY(25px);
 }
 
 .geminiStartTitle {
@@ -1276,6 +1300,20 @@ header.topBar p {
   max-width: 820px;
   position: relative;
   z-index: 2;
+}
+.geminiScreenWrapper.darkTheme .geminiInputCapsuleWrapper::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 104%;
+  height: 140px;
+  background: radial-gradient(ellipse at center, rgba(96, 165, 250, 0.42) 0%, rgba(139, 92, 246, 0.22) 42%, transparent 75%);
+  filter: blur(35px);
+  pointer-events: none;
+  z-index: 1;
+  border-radius: 9999px;
 }
 
 /* Pill Input Capsule (White Theme) */
@@ -1401,8 +1439,15 @@ header.topBar p {
 .geminiPlusMenuItem:hover {
   background: #f1f5f9;
 }
-.geminiPlusMenuItem.selected {
-  background: #f5f3ff;
+.geminiScreenWrapper.lightTheme .geminiPlusMenuItem.selected {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+.geminiScreenWrapper.lightTheme .geminiPlusMenuItem.selected b {
+  color: #1e40af;
+}
+.geminiScreenWrapper.lightTheme .geminiPlusMenuItem.selected small {
+  color: #3b82f6;
 }
 .geminiPlusMenuIcon {
   width: 26px;
@@ -1414,11 +1459,11 @@ header.topBar p {
   place-items: center;
   flex-shrink: 0;
 }
-.geminiPlusMenuIcon.allIcon {
+.geminiScreenWrapper.lightTheme .geminiPlusMenuIcon.allIcon {
   background: #ecfdf5;
   color: #065f46;
 }
-.geminiPlusMenuIcon.addIcon {
+.geminiScreenWrapper.lightTheme .geminiPlusMenuIcon.addIcon {
   background: #fef3c7;
   color: #b45309;
 }
