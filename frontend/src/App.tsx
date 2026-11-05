@@ -254,6 +254,19 @@ export default function App() {
     taskId?: string;
     taskPrompt?: string;
   } | null>(null);
+  const [deletedTaskIds, setDeletedTaskIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("deleted_task_ids");
+      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const deletedTaskIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    deletedTaskIdsRef.current = deletedTaskIds;
+  }, [deletedTaskIds]);
   const [quickConnName, setQuickConnName] = useState("");
   const [quickConnUrl, setQuickConnUrl] = useState("");
   const [expandedTraceTaskId, setExpandedTraceTaskId] = useState<string | null>(null);
@@ -497,13 +510,26 @@ export default function App() {
   }
 
   async function handleDeleteTask(taskId: string) {
-    // Optimistic UI state cleanup
+    // 1. Mark as deleted in ref & state so polling NEVER brings it back
+    deletedTaskIdsRef.current.add(taskId);
+    setDeletedTaskIds(prev => {
+      const next = new Set(prev);
+      next.add(taskId);
+      try {
+        localStorage.setItem("deleted_task_ids", JSON.stringify(Array.from(next)));
+      } catch (_) {}
+      return next;
+    });
+
+    // 2. Optimistic UI state cleanup
     setTasks(prev => prev.filter(item => item.id !== taskId));
     if (activeHistoryId === taskId) {
       setActiveHistoryId(null);
       setChatMessages([]);
       setConversationStarted(false);
     }
+
+    // 3. Backend permanent hard delete
     try {
       const r = await fetch(`${API}/tasks/${taskId}`, { method: "DELETE" });
       if (r.ok || r.status === 204) {
@@ -518,6 +544,17 @@ export default function App() {
   }
 
   async function executeClearAllTasks() {
+    setDeletedTaskIds(prev => {
+      const allIds = new Set(prev);
+      tasks.forEach(t => {
+        allIds.add(t.id);
+        deletedTaskIdsRef.current.add(t.id);
+      });
+      try {
+        localStorage.setItem("deleted_task_ids", JSON.stringify(Array.from(allIds)));
+      } catch (_) {}
+      return allIds;
+    });
     setTasks([]);
     setActiveHistoryId(null);
     setChatMessages([]);
@@ -589,8 +626,8 @@ export default function App() {
         if (!selectedConnId && cData.length > 0) setSelectedConnId(cData[0].id);
       }
       if (tRes.ok) {
-        const tData = await tRes.json();
-        setTasks(tData.reverse());
+        const tData: Task[] = await tRes.json();
+        setTasks(tData.filter(t => !deletedTaskIdsRef.current.has(t.id)).reverse());
       }
       if (conRes.ok) setConnectors(await conRes.json());
       if (appRes.ok) setApprovals(await appRes.json());
