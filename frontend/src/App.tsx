@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useState, useRef } from "react";
 import navioLogo from "./assets/navio-logo.png";
+import { ConnectorLogo } from "./ConnectorLogo";
 import {
   Activity,
   Bot,
@@ -19,6 +20,8 @@ import {
   Lock,
   Layers,
   FileSpreadsheet,
+  FileText,
+  Image as ImageIcon,
   Send,
   Sparkles,
   ExternalLink,
@@ -41,21 +44,76 @@ import {
   Settings,
   EyeOff,
   Cpu,
-  Menu
+  Menu,
+  User,
+  Upload,
+  ArrowDownToLine,
+  Pencil,
+  LogOut,
+  Mail,
+  Copy,
+  CalendarClock,
+  Play,
+  Pause
 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
-const WORKER_API = import.meta.env.VITE_WORKER_URL || "http://localhost:3001";
 
 type Connection = { id: string; name: string; websiteUrl: string; status: string; createdAt: string };
-type Task = { id: string; connectionId: string; prompt: string; status: string; result?: string; createdAt: string };
+type Conversation = { id: string; title: string; createdAt: string; updatedAt: string };
+type PersonalProfile = { id: string; enabled: boolean; fullName: string; email: string; phone: string; location: string; customText: string; updatedAt?: string };
+type PersonalFile = { id: string; fileName: string; contentType: string; fileSize: number; extractedText?: string; createdAt: string };
+type ScrapedItem = { title: string; href?: string; imageUrl?: string; fileExt?: string; category?: string; snippet?: string };
+type Task = { id: string; connectionId: string; prompt: string; status: string; result?: string; extractedItems?: string; createdAt: string };
 type Action = { id: string; actionType: string; description: string; status: string; createdAt: string };
 type Capability = { key: string; name: string; status: string; riskLevel: string; description: string };
 type Connector = { id: string; name: string; category: string; authType: string; status: string; capabilities: Capability[] };
 type Approval = { id: string; platform: string; actionDescription: string; riskLevel: string; approvalStatus: string; payload: string; consequences: string; requestedAt: string };
 type GeneratedFile = { id: string; taskId?: string; fileName: string; fileType: string; rowCount: number; contentPreview: string; downloadUrl: string; createdAt: string };
 type WhatsAppChat = { id: string; customerName: string; phone: string; lastMessage: string; intent: string; confidence: string; suggestedDraft: string; status: string };
+type ScheduledJobItem = { id: string; name: string; connectionId?: string | null; connectionName?: string; websiteUrl?: string; taskMode: string; cadence: string; requirements: string; preferredLocation?: string; scheduleTime: string; timezone: string; autoApply: boolean; maxApplyPerRun: number; enabled: boolean; lastRunDate?: string; lastRunAt?: string; lastStatus: string; lastSummary?: string; lastMatchedCount: number; lastAppliedCount: number; createdAt: string };
+type ScheduledJobRunItem = { id: string; scheduledJobId: string; scheduleName?: string; connectionName?: string; taskId?: string; status: string; matchedCount: number; appliedCount: number; summary?: string; startedAt: string; finishedAt?: string };
 type Toast = { id: string; type: "success" | "error" | "info"; message: string };
+type AuthUser = {
+  id: string;
+  email: string;
+  fullName: string;
+  authProvider: string;
+  avatarUrl?: string | null;
+  emailVerified?: boolean;
+};
+type AuthProviderStatus = {
+  emailEnabled: boolean;
+  googleConfigured: boolean;
+  googleClientId?: string;
+  googleClientIdMasked?: string;
+  googleConfigSource?: string;
+  redirectUri: string;
+  frontendOrigin?: string;
+};
+
+function GoogleGIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" style={{ flexShrink: 0, display: "block" }}>
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
+  );
+}
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -67,6 +125,7 @@ type ChatMessage = {
   status: "THINKING" | "RUNNING" | "COMPLETED" | "FAILED";
   actions?: Action[];
   file?: GeneratedFile;
+  scrapedItems?: ScrapedItem[];
   createdAt: string;
 };
 
@@ -130,6 +189,16 @@ function HistoryDocClockIcon({
   );
 }
 
+function parseScrapedItems(raw?: string): ScrapedItem[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function normalizeWebUrl(url: string): string {
   if (!url) return "";
   let clean = url.trim().toLowerCase();
@@ -143,7 +212,7 @@ function normalizeWebUrl(url: string): string {
 function FormattedMarkdown({ content }: { content?: string }) {
   if (!content) return null;
 
-  const lines = content.split("\n");
+  const lines = content.split(/\r?\n/);
   const elements: React.ReactNode[] = [];
   let currentList: React.ReactNode[] = [];
   let listKey = 0;
@@ -159,15 +228,24 @@ function FormattedMarkdown({ content }: { content?: string }) {
     }
   }
 
+  function cleanResidualSymbols(plain: string): string {
+    return plain
+      .replace(/\\([#*_\`])/g, "$1")
+      .replace(/\*{2,}/g, "")
+      .replace(/(^|[\s(["'])\*(?=\S)/g, "$1")
+      .replace(/(?<=\S)\*(?=[\s).,;:!?\]"']|$)/g, "")
+      .replace(/^#{1,6}\s*/gm, "");
+  }
+
   function formatInline(text: string): React.ReactNode[] {
     const tokens: React.ReactNode[] = [];
-    const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+    const regex = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(text)) !== null) {
       if (match.index > lastIndex) {
-        tokens.push(text.slice(lastIndex, match.index));
+        tokens.push(cleanResidualSymbols(text.slice(lastIndex, match.index)));
       }
       const token = match[0];
       if (token.startsWith("`") && token.endsWith("`")) {
@@ -175,6 +253,12 @@ function FormattedMarkdown({ content }: { content?: string }) {
           <code key={match.index} className="geminiMarkdownCode">
             {token.slice(1, -1)}
           </code>
+        );
+      } else if (token.startsWith("***") && token.endsWith("***")) {
+        tokens.push(
+          <strong key={match.index} className="geminiMarkdownBold">
+            <em className="geminiMarkdownItalic">{token.slice(3, -3)}</em>
+          </strong>
         );
       } else if (token.startsWith("**") && token.endsWith("**")) {
         tokens.push(
@@ -193,20 +277,51 @@ function FormattedMarkdown({ content }: { content?: string }) {
     }
 
     if (lastIndex < text.length) {
-      tokens.push(text.slice(lastIndex));
+      tokens.push(cleanResidualSymbols(text.slice(lastIndex)));
     }
 
     return tokens;
   }
 
+  let inCodeFence = false;
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
-    const bulletMatch = trimmed.match(/^(?:•|\-|\*)\s+(.*)$/);
+    if (/^```/.test(trimmed)) {
+      flushList();
+      inCodeFence = !inCodeFence;
+      return;
+    }
+    if (inCodeFence) {
+      flushList();
+      if (trimmed !== "") {
+        elements.push(
+          <p key={`code-${idx}`} className="geminiMarkdownParagraph">
+            <code className="geminiMarkdownCode">{line}</code>
+          </p>
+        );
+      }
+      return;
+    }
+    if (/^[-*_]{3,}$/.test(trimmed)) {
+      flushList();
+      elements.push(<hr key={`hr-${idx}`} className="geminiMarkdownDivider" />);
+      return;
+    }
+    const headingMatch = trimmed.match(/^#{1,6}\s+(.*)$/);
+    if (headingMatch) {
+      flushList();
+      elements.push(
+        <h3 key={`h-${idx}`} className="geminiMarkdownHeading">
+          {formatInline(headingMatch[1])}
+        </h3>
+      );
+      return;
+    }
+    const bulletMatch = trimmed.match(/^(?:•|\-|\*|\+)\s+(.*)$/);
     if (bulletMatch) {
-      const itemContent = bulletMatch[1];
       currentList.push(
         <li key={`li-${idx}`} className="geminiMarkdownListItem">
-          {formatInline(itemContent)}
+          {formatInline(bulletMatch[1])}
         </li>
       );
     } else {
@@ -229,49 +344,152 @@ function FormattedMarkdown({ content }: { content?: string }) {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "connections" | "capabilities" | "social" | "approvals" | "files" | "security" | "settings">("dashboard");
+  const AUTH_TOKEN_STORAGE_KEY = "navio_auth_token";
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const authTokenRef = useRef<string | null>(authToken);
+  useEffect(() => {
+    authTokenRef.current = authToken;
+  }, [authToken]);
+
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  function getActiveConvStorageKey(userId?: string | null) {
+    const uid = userId ?? currentUserIdRef.current;
+    return uid ? `navio_active_conversation_id_${uid}` : "navio_active_conversation_id";
+  }
+  function getDeletedTasksStorageKey(userId?: string | null) {
+    const uid = userId ?? currentUserIdRef.current;
+    return uid ? `deleted_task_ids_${uid}` : "deleted_task_ids";
+  }
+  const [authChecking, setAuthChecking] = useState<boolean>(true);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const authLoginTabRef = useRef<HTMLButtonElement | null>(null);
+  const authRegisterTabRef = useRef<HTMLButtonElement | null>(null);
+  const [authGliderStyle, setAuthGliderStyle] = useState<{ left: number; width: number }>({ left: 4, width: 0 });
+
+  useLayoutEffect(() => {
+    function measureAuthGlider() {
+      const activeBtn = authMode === "register" ? authRegisterTabRef.current : authLoginTabRef.current;
+      if (!activeBtn) return;
+      setAuthGliderStyle({
+        left: activeBtn.offsetLeft,
+        width: activeBtn.offsetWidth
+      });
+    }
+    measureAuthGlider();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measureAuthGlider) : null;
+    if (ro) {
+      if (authLoginTabRef.current) ro.observe(authLoginTabRef.current);
+      if (authRegisterTabRef.current) ro.observe(authRegisterTabRef.current);
+    }
+    let cancelled = false;
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        if (!cancelled) measureAuthGlider();
+      });
+    }
+    return () => {
+      cancelled = true;
+      ro?.disconnect();
+    };
+  }, [authMode, authChecking, currentUser]);
+  const [authFullName, setAuthFullName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authProviders, setAuthProviders] = useState<AuthProviderStatus>({
+    emailEnabled: true,
+    googleConfigured: false,
+    redirectUri: "http://localhost:8080/api/v1/auth/google/callback"
+  });
+  const [showGoogleSetupModal, setShowGoogleSetupModal] = useState(false);
+  const [googleClientIdInput, setGoogleClientIdInput] = useState("");
+  const [googleClientSecretInput, setGoogleClientSecretInput] = useState("");
+  const [googleSetupSaving, setGoogleSetupSaving] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<"dashboard" | "connections" | "capabilities" | "social" | "scheduler" | "approvals" | "files" | "security" | "personalization" | "settings">("dashboard");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [files, setFiles] = useState<GeneratedFile[]>([]);
   const [waChats, setWaChats] = useState<WhatsAppChat[]>([]);
+  const [scheduledJobs, setScheduledJobs] = useState<ScheduledJobItem[]>([]);
+  const [scheduledRuns, setScheduledRuns] = useState<ScheduledJobRunItem[]>([]);
+  const [schedName, setSchedName] = useState("");
+  const [schedConnId, setSchedConnId] = useState("");
+  const [schedTime, setSchedTime] = useState("09:30");
+  const [schedTimezone, setSchedTimezone] = useState("Asia/Kolkata");
+  const [schedRequirements, setSchedRequirements] = useState("");
+  const [schedLocation, setSchedLocation] = useState("");
+  const [schedTaskMode, setSchedTaskMode] = useState<"AUTO" | "BROWSER_TASK" | "JOB_AUTOMATION" | "AI_CHAT">("AUTO");
+  const [schedCadence, setSchedCadence] = useState<"DAILY" | "WEEKDAYS" | "HOURLY">("DAILY");
+  const [schedAutoApply, setSchedAutoApply] = useState(false);
+  const [schedMaxApply, setSchedMaxApply] = useState(5);
+  const [schedSaving, setSchedSaving] = useState(false);
+  const [runningSchedId, setRunningSchedId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Settings & AI Configuration state
   const [aiProvider, setAiProvider] = useState<"gemini" | "openai" | "claude" | "groq">("gemini");
   const [aiApiKey, setAiApiKey] = useState<string>("");
   const [aiModel, setAiModel] = useState<string>("gemini-1.5-flash");
-  const [aiStatus, setAiStatus] = useState<{ isConfigured: boolean; maskedKey?: string; message?: string }>({ isConfigured: false });
+  const [aiStatus, setAiStatus] = useState<{ isConfigured: boolean; maskedKey?: string; message?: string; lastError?: string }>({ isConfigured: false });
   const [showAiKey, setShowAiKey] = useState<boolean>(false);
   const [isTestingAiKey, setIsTestingAiKey] = useState<boolean>(false);
+
+  // Personalization state (custom text & uploaded files)
+  const [personalProfile, setPersonalProfile] = useState<PersonalProfile>({
+    id: "default",
+    enabled: true,
+    fullName: "",
+    email: "",
+    phone: "",
+    location: "",
+    customText: ""
+  });
+  const [personalFiles, setPersonalFiles] = useState<PersonalFile[]>([]);
+  const [savingPersonalization, setSavingPersonalization] = useState(false);
+  const [uploadingPersonalFiles, setUploadingPersonalFiles] = useState(false);
+  const [personalDragActive, setPersonalDragActive] = useState(false);
+  const [expandedPersonalFileId, setExpandedPersonalFileId] = useState<string | null>(null);
+  const personalFileInputRef = useRef<HTMLInputElement>(null);
 
   // Gemini AI Command Center state
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [conversationStarted, setConversationStarted] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const [editingConvId, setEditingConvId] = useState<string | null>(null);
+  const [editingConvTitle, setEditingConvTitle] = useState("");
+  const editTitleCancelRef = useRef(false);
+  const ACTIVE_CONV_STORAGE_KEY = "navio_active_conversation_id";
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [geminiPrompt, setGeminiPrompt] = useState("");
   const [selectedTarget, setSelectedTarget] = useState<string>(""); // "" (none/general), "all", or connection.id
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
     type: "single" | "all";
+    conversationId?: string;
     taskId?: string;
     taskPrompt?: string;
   } | null>(null);
-  const [deletedTaskIds, setDeletedTaskIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem("deleted_task_ids");
-      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
-    } catch {
-      return new Set<string>();
-    }
-  });
+  const [deletedTaskIds, setDeletedTaskIds] = useState<Set<string>>(() => new Set<string>());
   const deletedTaskIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -281,8 +499,11 @@ export default function App() {
   const [quickConnUrl, setQuickConnUrl] = useState("");
   const [expandedTraceTaskId, setExpandedTraceTaskId] = useState<string | null>(null);
   const [taskTraceCache, setTaskTraceCache] = useState<Record<string, Action[]>>({});
+  const [showTopProfileMenu, setShowTopProfileMenu] = useState(false);
   const geminiTextareaRef = useRef<HTMLTextAreaElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
+  const mentionMenuRef = useRef<HTMLDivElement>(null);
+  const topProfileMenuRef = useRef<HTMLDivElement>(null);
   const chatFeedBottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll chat feed to bottom when new messages arrive
@@ -292,20 +513,26 @@ export default function App() {
     }
   }, [chatMessages, conversationStarted]);
 
-  // Close plus popover menu when clicking outside
+  // Close plus popover and @ mention menus when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setShowPlusMenu(false);
       }
+      if (mentionMenuRef.current && !mentionMenuRef.current.contains(e.target as Node)) {
+        setShowMentionDropdown(false);
+      }
+      if (topProfileMenuRef.current && !topProfileMenuRef.current.contains(e.target as Node)) {
+        setShowTopProfileMenu(false);
+      }
     }
-    if (showPlusMenu) {
+    if (showPlusMenu || showMentionDropdown || showTopProfileMenu) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [showPlusMenu]);
+  }, [showPlusMenu, showMentionDropdown, showTopProfileMenu]);
 
   function showToast(message: string, type: "success" | "error" | "info" = "info") {
     const id = Math.random().toString(36).substring(2, 9);
@@ -319,43 +546,339 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }
 
-  // Load saved AI config from worker & localStorage
+  async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const token = authTokenRef.current;
+    const headers = new Headers(init?.headers || undefined);
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const res = await fetch(input, { ...init, headers });
+    const urlStr = typeof input === "string" ? input : input.toString();
+    if (res.status === 401 && !urlStr.includes("/auth/login") && !urlStr.includes("/auth/register")) {
+      authTokenRef.current = null;
+      currentUserIdRef.current = null;
+      setAuthToken(null);
+      setCurrentUser(null);
+      resetWorkspaceState();
+      try {
+        localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      } catch {}
+    }
+    return res;
+  }
+
+  async function refreshAuthProviders() {
+    try {
+      const res = await apiFetch(`${API}/auth/providers`);
+      if (res.ok) {
+        const data: AuthProviderStatus = await res.json();
+        setAuthProviders(data);
+        if (data.googleClientId) {
+          setGoogleClientIdInput(prev => prev || data.googleClientId || "");
+        }
+      }
+    } catch {}
+  }
+
+  function applyAuthenticatedSession(token: string, user: AuthUser, notice?: string) {
+    const prevUserId = currentUserIdRef.current;
+    if (prevUserId !== user.id) {
+      resetWorkspaceState();
+    }
+    authTokenRef.current = token;
+    currentUserIdRef.current = user.id;
+    setAuthToken(token);
+    setCurrentUser(user);
+    setAuthError(null);
+    setAuthPassword("");
+    try {
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+      const userDeleted = localStorage.getItem(getDeletedTasksStorageKey(user.id));
+      const parsedSet = userDeleted ? new Set<string>(JSON.parse(userDeleted)) : new Set<string>();
+      deletedTaskIdsRef.current = parsedSet;
+      setDeletedTaskIds(parsedSet);
+    } catch {
+      deletedTaskIdsRef.current = new Set<string>();
+      setDeletedTaskIds(new Set<string>());
+    }
+    if (notice) showToast(notice, "success");
+  }
+
+  function handleLogout() {
+    const prevUserId = currentUserIdRef.current;
+    authTokenRef.current = null;
+    currentUserIdRef.current = null;
+    setAuthToken(null);
+    setCurrentUser(null);
+    resetWorkspaceState();
+    try {
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      if (prevUserId) {
+        sessionStorage.removeItem(getActiveConvStorageKey(prevUserId));
+      }
+      sessionStorage.removeItem(ACTIVE_CONV_STORAGE_KEY);
+    } catch {}
+    showToast("Signed out of Navio.", "info");
+  }
+
   useEffect(() => {
-    const savedKey = localStorage.getItem("browser_agent_ai_key");
-    const savedProvider = (localStorage.getItem("browser_agent_ai_provider") as "gemini" | "openai" | "claude" | "groq") || "gemini";
-    const savedModel = localStorage.getItem("browser_agent_ai_model") || "gemini-1.5-flash";
-    if (savedKey) {
-      setAiApiKey(savedKey);
-      setAiProvider(savedProvider);
-      setAiModel(savedModel);
-      setAiStatus({
-        isConfigured: true,
-        maskedKey: savedKey.length > 8 ? `${savedKey.slice(0, 4)}...${savedKey.slice(-4)}` : "••••••••"
+    void refreshAuthProviders();
+
+    let tokenFromHash: string | null = null;
+    let errorFromHash: string | null = null;
+    if (window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      tokenFromHash = hashParams.get("auth_token");
+      errorFromHash = hashParams.get("auth_error");
+      if (tokenFromHash || errorFromHash) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    }
+
+    if (errorFromHash) {
+      setAuthError(errorFromHash);
+      showToast(errorFromHash, "error");
+    }
+
+    const candidateToken = tokenFromHash || (() => {
+      try {
+        return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!candidateToken) {
+      setAuthChecking(false);
+      return;
+    }
+
+    authTokenRef.current = candidateToken;
+    setAuthToken(candidateToken);
+    apiFetch(`${API}/auth/me`, {
+      headers: { Authorization: `Bearer ${candidateToken}` }
+    })
+      .then(async res => {
+        if (!res.ok) throw new Error("Session expired");
+        return res.json();
+      })
+      .then(data => {
+        if (data?.user) {
+          applyAuthenticatedSession(candidateToken, data.user);
+        } else {
+          throw new Error("Invalid session");
+        }
+      })
+      .catch(() => {
+        authTokenRef.current = null;
+        setAuthToken(null);
+        setCurrentUser(null);
+        try {
+          localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+        } catch {}
+      })
+      .finally(() => {
+        setAuthChecking(false);
       });
-      // Silently sync to backend worker runtime
-      fetch(`${WORKER_API}/v1/config/ai`, {
+  }, []);
+
+  useEffect(() => {
+    function onWindowMessage(event: MessageEvent) {
+      let allowedOrigin = "";
+      try {
+        allowedOrigin = new URL(API).origin;
+      } catch {}
+      if (allowedOrigin && event.origin !== allowedOrigin && event.origin !== window.location.origin) {
+        return;
+      }
+      const data = event.data;
+      if (!data || data.type !== "navio-google-auth") return;
+
+      if (data.error) {
+        setAuthError(data.error);
+        setAuthSubmitting(false);
+        showToast(data.error, "error");
+        return;
+      }
+      if (data.token && data.user) {
+        setAuthSubmitting(false);
+        setShowGoogleSetupModal(false);
+        applyAuthenticatedSession(data.token, data.user, `Signed in with Google as ${data.user.fullName}!`);
+      }
+    }
+    window.addEventListener("message", onWindowMessage);
+    return () => window.removeEventListener("message", onWindowMessage);
+  }, []);
+
+  async function handleEmailAuthSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError(null);
+    const trimmedEmail = authEmail.trim();
+    if (!trimmedEmail) {
+      setAuthError("Please enter your Gmail / Email address.");
+      return;
+    }
+    if (authPassword.length < 6) {
+      setAuthError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setAuthSubmitting(true);
+    try {
+      const endpoint = authMode === "register" ? `${API}/auth/register` : `${API}/auth/login`;
+      const payload = authMode === "register"
+        ? { fullName: authFullName.trim(), email: trimmedEmail, password: authPassword }
+        : { email: trimmedEmail, password: authPassword };
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data?.error || "Authentication failed.");
+        return;
+      }
+      if (data?.token && data?.user) {
+        applyAuthenticatedSession(
+          data.token,
+          data.user,
+          authMode === "register" ? `Welcome to Navio, ${data.user.fullName}!` : `Signed in as ${data.user.email}`
+        );
+      }
+    } catch {
+      setAuthError("Cannot reach Navio backend server on port 8080.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }
+
+  async function launchGoogleOAuthFlow() {
+    setAuthError(null);
+    setAuthSubmitting(true);
+    try {
+      const res = await apiFetch(`${API}/auth/google/url?mode=popup&origin=${encodeURIComponent(window.location.origin)}`);
+      const data = await res.json();
+      if (!res.ok || !data?.url) {
+        setAuthSubmitting(false);
+        if (!authProviders.googleConfigured) {
+          setShowGoogleSetupModal(true);
+        } else {
+          setAuthError(data?.error || "Failed to initialize Google login.");
+        }
+        return;
+      }
+
+      const w = 520;
+      const h = 640;
+      const left = Math.max(0, window.screenX + (window.outerWidth - w) / 2);
+      const top = Math.max(0, window.screenY + (window.outerHeight - h) / 2);
+      const popup = window.open(
+        data.url,
+        "navioGoogleAuth",
+        `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
+      if (!popup || popup.closed) {
+        // Fallback to full-page redirect if popup blocked
+        const redirectRes = await apiFetch(`${API}/auth/google/url?mode=redirect&origin=${encodeURIComponent(window.location.origin)}`);
+        const redirectData = await redirectRes.json();
+        if (redirectData?.url) {
+          window.location.href = redirectData.url;
+          return;
+        }
+        setAuthSubmitting(false);
+        setAuthError("Popup was blocked by the browser. Please allow popups or try again.");
+        return;
+      }
+
+      const pollClosed = window.setInterval(() => {
+        if (popup.closed) {
+          window.clearInterval(pollClosed);
+          setAuthSubmitting(false);
+        }
+      }, 450);
+    } catch {
+      setAuthSubmitting(false);
+      setAuthError("Failed to start Google sign-in.");
+    }
+  }
+
+  function handleContinueWithGoogle() {
+    if (!authProviders.googleConfigured) {
+      setShowGoogleSetupModal(true);
+      return;
+    }
+    void launchGoogleOAuthFlow();
+  }
+
+  async function handleSaveGoogleConfig(launchAfterSave: boolean) {
+    if (!googleClientIdInput.trim() || !googleClientSecretInput.trim()) {
+      showToast("Please enter both Google Client ID and Client Secret.", "error");
+      return;
+    }
+    setGoogleSetupSaving(true);
+    try {
+      const res = await apiFetch(`${API}/auth/google/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider: savedProvider,
-          apiKey: savedKey,
-          model: savedModel,
-          skipTest: true
+          clientId: googleClientIdInput.trim(),
+          clientSecret: googleClientSecretInput.trim(),
+          redirectUri: authProviders.redirectUri
         })
-      }).catch(() => {});
-    } else {
-      fetch(`${WORKER_API}/v1/config/ai`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.isConfigured) {
-            setAiStatus({ isConfigured: true, maskedKey: data.maskedKey });
-            if (data.provider) setAiProvider(data.provider);
-            if (data.model) setAiModel(data.model);
-          }
-        })
-        .catch(() => {});
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data?.error || "Failed to save Google OAuth settings.", "error");
+        return;
+      }
+      setGoogleClientSecretInput("");
+      await refreshAuthProviders();
+      showToast("Google OAuth configured successfully!", "success");
+      setShowGoogleSetupModal(false);
+      if (launchAfterSave) {
+        void launchGoogleOAuthFlow();
+      }
+    } catch {
+      showToast("Network error saving Google OAuth settings.", "error");
+    } finally {
+      setGoogleSetupSaving(false);
     }
-  }, []);
+  }
+
+  // Load per-user encrypted AI config from authenticated backend (never shared localStorage)
+  useEffect(() => {
+    try {
+      localStorage.removeItem("browser_agent_ai_key");
+      localStorage.removeItem("browser_agent_ai_provider");
+      localStorage.removeItem("browser_agent_ai_model");
+    } catch {}
+    if (!currentUser?.id) {
+      setAiApiKey("");
+      setAiStatus({ isConfigured: false });
+      return;
+    }
+    let cancelled = false;
+    apiFetch(`${API}/ai/config`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled) return;
+        if (data && data.isConfigured) {
+          setAiStatus({ isConfigured: true, maskedKey: data.maskedKey, lastError: data.lastError || undefined });
+          if (data.provider) setAiProvider(data.provider);
+          if (data.model) setAiModel(data.model);
+        } else {
+          setAiStatus({ isConfigured: false });
+          setAiProvider("gemini");
+          setAiModel("gemini-1.5-flash");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id]);
 
   async function handleSaveAiConfig() {
     const key = aiApiKey.trim();
@@ -364,17 +887,12 @@ export default function App() {
       return;
     }
 
-    // Instantly persist in browser storage
-    localStorage.setItem("browser_agent_ai_key", key);
-    localStorage.setItem("browser_agent_ai_provider", aiProvider);
-    localStorage.setItem("browser_agent_ai_model", aiModel);
-
     const masked = key.length > 8 ? `${key.slice(0, 4)}...${key.slice(-4)}` : "••••••••";
     setAiStatus({ isConfigured: true, maskedKey: masked });
 
     setIsTestingAiKey(true);
     try {
-      const res = await fetch(`${WORKER_API}/v1/config/ai`, {
+      const res = await apiFetch(`${API}/ai/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -384,29 +902,38 @@ export default function App() {
         })
       });
       const data = await res.json();
-      if (data && data.config) {
+      if (!res.ok) {
+        setAiStatus({ isConfigured: false });
+        showToast(data?.error || "Failed to save AI configuration.", "error");
+        return;
+      }
+      if (data?.config) {
+        if (data.config.model) {
+          setAiModel(data.config.model);
+        }
         setAiStatus({
           isConfigured: true,
           maskedKey: data.config.maskedKey || masked,
-          message: data.message
+          message: data.message,
+          lastError: data.verified === false ? (data.config.lastError || data.message) : undefined
         });
       }
+      setAiApiKey("");
       showToast(data?.message || `Saved ${aiProvider.toUpperCase()} API key!`, data?.verified === false ? "info" : "success");
     } catch (err) {
-      showToast(`API Key saved locally! (Worker note: ${err instanceof Error ? err.message : "check worker connection"})`, "info");
+      showToast(`Failed to save AI key (${err instanceof Error ? err.message : "check backend connection"})`, "error");
     } finally {
       setIsTestingAiKey(false);
     }
   }
 
-  function handleClearAiConfig() {
-    localStorage.removeItem("browser_agent_ai_key");
-    localStorage.removeItem("browser_agent_ai_provider");
-    localStorage.removeItem("browser_agent_ai_model");
+  async function handleClearAiConfig() {
     setAiApiKey("");
     setAiStatus({ isConfigured: false });
-    fetch(`${WORKER_API}/v1/config/ai`, { method: "DELETE" }).catch(() => {});
-    showToast("AI Key cleared. System running in smart Heuristic Fallback mode.", "info");
+    try {
+      await apiFetch(`${API}/ai/config`, { method: "DELETE" });
+    } catch {}
+    showToast("AI Key cleared for your account. System running in Heuristic Fallback mode.", "info");
   }
 
   // Task execution state
@@ -431,6 +958,47 @@ export default function App() {
   // Table Selection & Bulk Delete state
   const [selectedConnRowIds, setSelectedConnRowIds] = useState<string[]>([]);
   const [selectedFileRowIds, setSelectedFileRowIds] = useState<string[]>([]);
+
+  function resetWorkspaceState() {
+    setConnections([]);
+    setTasks([]);
+    setApprovals([]);
+    setFiles([]);
+    setWaChats([]);
+    setScheduledJobs([]);
+    setScheduledRuns([]);
+    setSchedConnId("");
+    setSchedName(""); setSchedRequirements(""); setSchedLocation(""); setRunningSchedId(null);
+    setConversations([]);
+    setChatMessages([]);
+    setConversationStarted(false);
+    setActiveHistoryId(null);
+    activeConversationIdRef.current = null;
+    setSelectedConnId("");
+    setSelectedTarget("");
+    setSelectedTaskDetail(null);
+    setTaskTraceCache({});
+    setExpandedTraceTaskId(null);
+    setSelectedConnRowIds([]);
+    setSelectedFileRowIds([]);
+    setPersonalProfile({
+      id: "",
+      enabled: true,
+      fullName: "",
+      email: "",
+      phone: "",
+      location: "",
+      customText: ""
+    });
+    setPersonalFiles([]);
+    setAiApiKey("");
+    setAiStatus({ isConfigured: false });
+    setAiProvider("gemini");
+    setAiModel("gemini-1.5-flash");
+    deletedTaskIdsRef.current = new Set<string>();
+    setDeletedTaskIds(new Set<string>());
+    setShowTopProfileMenu(false);
+  }
 
   function toggleSelectAll(checked: boolean) {
     if (checked) {
@@ -466,7 +1034,7 @@ export default function App() {
 
   async function handleDeleteFile(id: string) {
     try {
-      const r = await fetch(`${API}/files/${id}`, { method: "DELETE" });
+      const r = await apiFetch(`${API}/files/${id}`, { method: "DELETE" });
       if (r.ok) {
         showToast("Report file deleted successfully.", "success");
         setSelectedFileRowIds(prev => prev.filter(x => x !== id));
@@ -482,7 +1050,7 @@ export default function App() {
   async function handleDeleteSelectedFiles() {
     if (selectedFileRowIds.length === 0) return;
     try {
-      const r = await fetch(`${API}/files/batch-delete`, {
+      const r = await apiFetch(`${API}/files/batch-delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(selectedFileRowIds)
@@ -502,7 +1070,7 @@ export default function App() {
   async function handleDeleteSelectedConnections() {
     if (selectedConnRowIds.length === 0) return;
     try {
-      const r = await fetch(`${API}/connections/batch-delete`, {
+      const r = await apiFetch(`${API}/connections/batch-delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(selectedConnRowIds)
@@ -526,7 +1094,7 @@ export default function App() {
       const next = new Set(prev);
       next.add(taskId);
       try {
-        localStorage.setItem("deleted_task_ids", JSON.stringify(Array.from(next)));
+        localStorage.setItem(getDeletedTasksStorageKey(), JSON.stringify(Array.from(next)));
       } catch (_) {}
       return next;
     });
@@ -541,7 +1109,7 @@ export default function App() {
 
     // 3. Backend permanent hard delete
     try {
-      const r = await fetch(`${API}/tasks/${taskId}`, { method: "DELETE" });
+      const r = await apiFetch(`${API}/tasks/${taskId}`, { method: "DELETE" });
       if (r.ok || r.status === 204) {
         showToast("Command permanently deleted.", "info");
       } else {
@@ -561,7 +1129,7 @@ export default function App() {
         deletedTaskIdsRef.current.add(t.id);
       });
       try {
-        localStorage.setItem("deleted_task_ids", JSON.stringify(Array.from(allIds)));
+        localStorage.setItem(getDeletedTasksStorageKey(), JSON.stringify(Array.from(allIds)));
       } catch (_) {}
       return allIds;
     });
@@ -570,7 +1138,7 @@ export default function App() {
     setChatMessages([]);
     setConversationStarted(false);
     try {
-      await fetch(`${API}/tasks`, { method: "DELETE" });
+      await apiFetch(`${API}/tasks`, { method: "DELETE" });
       showToast("All command history permanently deleted.", "info");
     } catch (err) {
       console.error("Hard delete all tasks error:", err);
@@ -582,7 +1150,7 @@ export default function App() {
     setBusy(true);
     showToast(`Launching Chromium login window for ${c.name}...`, "info");
     try {
-      const r = await fetch(`${API}/connections/${c.id}/launch-login`, { method: "POST" });
+      const r = await apiFetch(`${API}/connections/${c.id}/launch-login`, { method: "POST" });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Failed to open login browser");
       setLoginModalConn(c);
@@ -598,7 +1166,7 @@ export default function App() {
     if (!loginModalConn) return;
     setLoginModalLoading(true);
     try {
-      const r = await fetch(`${API}/connections/${loginModalConn.id}/confirm-login`, { method: "POST" });
+      const r = await apiFetch(`${API}/connections/${loginModalConn.id}/confirm-login`, { method: "POST" });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Failed to save session");
       showToast(`Session for ${loginModalConn.name} authenticated and saved successfully.`, "success");
@@ -614,26 +1182,34 @@ export default function App() {
   async function cancelBrowserLogin() {
     if (!loginModalConn) return;
     try {
-      await fetch(`${API}/connections/${loginModalConn.id}/cancel-login`, { method: "POST" });
+      await apiFetch(`${API}/connections/${loginModalConn.id}/cancel-login`, { method: "POST" });
     } catch (_) {}
     setLoginModalConn(null);
   }
 
-  async function loadData() {
+  async function loadData(): Promise<{ conversations: Conversation[]; convOk: boolean }> {
+    let loadedConversations: Conversation[] = [];
+    let convOk = false;
     try {
-      const [cRes, tRes, conRes, appRes, fRes, waRes] = await Promise.all([
-        fetch(`${API}/connections`),
-        fetch(`${API}/tasks`),
-        fetch(`${API}/connectors`),
-        fetch(`${API}/approvals`),
-        fetch(`${API}/files`),
-        fetch(`${API}/social/whatsapp/inbox`).catch(() => null)
+      const [cRes, tRes, conRes, appRes, fRes, waRes, convRes, schedRes] = await Promise.all([
+        apiFetch(`${API}/connections`),
+        apiFetch(`${API}/tasks`),
+        apiFetch(`${API}/connectors`),
+        apiFetch(`${API}/approvals`),
+        apiFetch(`${API}/files`),
+        apiFetch(`${API}/social/whatsapp/inbox`).catch(() => null),
+        apiFetch(`${API}/conversations`).catch(() => null),
+        apiFetch(`${API}/schedules`).catch(() => null)
       ]);
 
       if (cRes.ok) {
         const cData = await cRes.json();
         setConnections(cData);
         if (!selectedConnId && cData.length > 0) setSelectedConnId(cData[0].id);
+        if (!schedConnId && cData.length > 0) {
+          const jobSite = cData.find((c: Connection) => /naukri|linkedin|indeed|internshala|foundit|glassdoor|wellfound|job/i.test(c.name + " " + c.websiteUrl));
+          setSchedConnId((jobSite || cData[0]).id);
+        }
       }
       if (tRes.ok) {
         const tData: Task[] = await tRes.json();
@@ -643,16 +1219,499 @@ export default function App() {
       if (appRes.ok) setApprovals(await appRes.json());
       if (fRes.ok) setFiles(await fRes.json());
       if (waRes && waRes.ok) setWaChats(await waRes.json());
+      if (convRes && convRes.ok) {
+        loadedConversations = await convRes.json();
+        setConversations(loadedConversations);
+        convOk = true;
+      }
+      if (schedRes && schedRes.ok) {
+        const schedData = await schedRes.json();
+        if (Array.isArray(schedData?.schedules)) setScheduledJobs(schedData.schedules);
+        if (Array.isArray(schedData?.runs)) setScheduledRuns(schedData.runs);
+      }
     } catch {
       // Background poll failure
+    }
+    return { conversations: loadedConversations, convOk };
+  }
+
+  function parseDailyScheduleTimeFromPrompt(text: string): string {
+    const m24 = text.match(/\bat\s+(\d{1,2}):(\d{2})(?!\s*(?:am|pm))\b/i);
+    if (m24) {
+      const hh = Math.min(23, Math.max(0, parseInt(m24[1], 10))).toString().padStart(2, "0");
+      const mm = Math.min(59, Math.max(0, parseInt(m24[2], 10))).toString().padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
+    const m12 = text.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+    if (m12) {
+      let hh = parseInt(m12[1], 10);
+      const mm = parseInt(m12[2] || "0", 10);
+      const meridiem = m12[3].toLowerCase();
+      if (meridiem === "pm" && hh < 12) hh += 12;
+      if (meridiem === "am" && hh === 12) hh = 0;
+      return `${hh.toString().padStart(2, "0")}:${Math.min(59, mm).toString().padStart(2, "0")}`;
+    }
+    return "09:30";
+  }
+
+  function parseCadenceFromPrompt(text: string): "DAILY" | "WEEKDAYS" | "HOURLY" {
+    if (/\b(hourly|every\s+hour)\b/i.test(text)) return "HOURLY";
+    if (/\b(weekday|weekdays|mon-fri|workdays?)\b/i.test(text)) return "WEEKDAYS";
+    return "DAILY";
+  }
+
+  async function handleCreateSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    if (schedTaskMode === "JOB_AUTOMATION" && !schedConnId) {
+      showToast("Select a connected job portal first.", "error");
+      return;
+    }
+    if (!schedRequirements.trim()) {
+      showToast("Enter the task instructions or requirements to schedule.", "error");
+      return;
+    }
+    const effectiveConnId = schedTaskMode === "AI_CHAT" ? null : (schedConnId || null);
+    const targetConn = connections.find(c => c.id === effectiveConnId);
+    const nameToUse = schedName.trim() || `${schedCadence === "HOURLY" ? "Hourly" : schedCadence === "WEEKDAYS" ? "Weekday" : "Daily"} ${targetConn?.name || "AI"} Task`;
+    setSchedSaving(true);
+    try {
+      const res = await apiFetch(`${API}/schedules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nameToUse,
+          connectionId: effectiveConnId,
+          taskMode: schedTaskMode,
+          cadence: schedCadence,
+          requirements: schedRequirements.trim(),
+          preferredLocation: schedLocation.trim(),
+          scheduleTime: schedTime,
+          timezone: schedTimezone,
+          autoApply: schedTaskMode === "JOB_AUTOMATION" ? schedAutoApply : (schedTaskMode === "AUTO" ? schedAutoApply : false),
+          maxApplyPerRun: Math.max(1, Math.min(25, Number(schedMaxApply) || 5)),
+          enabled: true
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to save schedule");
+      setSchedName("");
+      setSchedRequirements("");
+      await loadData();
+      showToast(`Scheduled (${schedCadence}) at ${schedTime} ${schedTimezone}.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save schedule", "error");
+    } finally {
+      setSchedSaving(false);
+    }
+  }
+
+  async function handleToggleSchedule(id: string) {
+    try {
+      const res = await apiFetch(`${API}/schedules/${id}/toggle`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to toggle schedule");
+      await loadData();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to toggle schedule", "error");
+    }
+  }
+
+  async function handleRunScheduleNow(id: string) {
+    setRunningSchedId(id);
+    showToast("Launching browser to scrape matched jobs & run apply flow...", "info");
+    try {
+      const res = await apiFetch(`${API}/schedules/${id}/run`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Scheduled job run failed");
+      await loadData();
+      showToast(
+        data.summary || `Matched ${data.matchedCount || 0} job(s), applied ${data.appliedCount || 0}.`,
+        data.status === "FAILED" ? "error" : "success"
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Scheduled job run failed", "error");
+    } finally {
+      setRunningSchedId(null);
+    }
+  }
+
+  async function handleDeleteSchedule(id: string) {
+    try {
+      const res = await apiFetch(`${API}/schedules/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete schedule");
+      await loadData();
+      showToast("Schedule deleted.", "info");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to delete schedule", "error");
+    }
+  }
+
+  async function loadPersonalization() {
+    try {
+      const res = await apiFetch(`${API}/personalization`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.profile) {
+          setPersonalProfile({
+            id: data.profile.id || "default",
+            enabled: data.profile.enabled !== false,
+            fullName: data.profile.fullName || "",
+            email: data.profile.email || "",
+            phone: data.profile.phone || "",
+            location: data.profile.location || "",
+            customText: data.profile.customText || "",
+            updatedAt: data.profile.updatedAt
+          });
+        }
+        if (Array.isArray(data?.files)) {
+          setPersonalFiles(data.files);
+        }
+      }
+    } catch {}
+  }
+
+  async function handleSavePersonalization(overrideEnabled?: boolean) {
+    setSavingPersonalization(true);
+    const nextProfile = {
+      ...personalProfile,
+      enabled: overrideEnabled !== undefined ? overrideEnabled : personalProfile.enabled
+    };
+    try {
+      const res = await apiFetch(`${API}/personalization/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: nextProfile.enabled,
+          fullName: nextProfile.fullName,
+          email: nextProfile.email,
+          phone: nextProfile.phone,
+          location: nextProfile.location,
+          customText: nextProfile.customText
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save personalization");
+      setPersonalProfile({
+        id: data.id || "default",
+        enabled: data.enabled !== false,
+        fullName: data.fullName || "",
+        email: data.email || "",
+        phone: data.phone || "",
+        location: data.location || "",
+        customText: data.customText || "",
+        updatedAt: data.updatedAt
+      });
+      showToast(
+        overrideEnabled !== undefined
+          ? `Personalization ${data.enabled ? "enabled" : "paused"}.`
+          : "Personalization details saved! Navio will use them automatically when needed.",
+        "success"
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save personalization", "error");
+    } finally {
+      setSavingPersonalization(false);
+    }
+  }
+
+  async function handleUploadPersonalFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setUploadingPersonalFiles(true);
+    let successCount = 0;
+    try {
+      for (const file of Array.from(fileList)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await apiFetch(`${API}/personalization/files`, {
+          method: "POST",
+          body: fd
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || `Failed to upload ${file.name}`);
+        }
+        successCount++;
+      }
+      await loadPersonalization();
+      if (successCount > 0) {
+        showToast(`Uploaded ${successCount} personal file(s) successfully.`, "success");
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "File upload failed", "error");
+    } finally {
+      setUploadingPersonalFiles(false);
+      if (personalFileInputRef.current) personalFileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDeletePersonalFile(id: string) {
+    try {
+      const res = await apiFetch(`${API}/personalization/files/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to remove personal file");
+      setPersonalFiles(prev => prev.filter(f => f.id !== id));
+      if (expandedPersonalFileId === id) setExpandedPersonalFileId(null);
+      showToast("Personal file deleted.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to delete file", "error");
+    }
+  }
+
+  function buildClientPersonalizationPayload() {
+    if (!personalProfile.enabled) return { enabled: false };
+    return {
+      enabled: true,
+      fullName: personalProfile.fullName,
+      email: personalProfile.email,
+      phone: personalProfile.phone,
+      location: personalProfile.location,
+      customText: personalProfile.customText,
+      files: personalFiles.map(f => ({
+        id: f.id,
+        fileName: f.fileName,
+        contentType: f.contentType,
+        fileSize: f.fileSize,
+        extractedText: f.extractedText || ""
+      }))
+    };
+  }
+
+  function formatFileSize(bytes: number) {
+    if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function buildConversationTitle(promptText: string): string {
+    const stripped = promptText
+      .replace(/^@(all|[a-zA-Z0-9._-]+)\s*/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const base = stripped || promptText.replace(/\s+/g, " ").trim() || "New chat";
+    return base.length > 60 ? base.slice(0, 57) + "..." : base;
+  }
+
+  function buildConversationContextWindow(msgs: ChatMessage[]): Array<{ role: "user" | "assistant"; content: string; targetName?: string }> {
+    return msgs
+      .filter(m => m.role === "user" || (m.status !== "THINKING" && m.status !== "RUNNING"))
+      .slice(-24)
+      .map(m => {
+        if (m.role === "user") {
+          const text = (m.prompt || m.content || "").trim();
+          return { role: "user" as const, content: text, targetName: m.targetName || undefined };
+        }
+        const parts: string[] = [];
+        if (m.content?.trim()) parts.push(m.content.trim());
+        if (m.scrapedItems && m.scrapedItems.length > 0) {
+          const previewTitles = m.scrapedItems.slice(0, 8).map(item => item.title).filter(Boolean).join(", ");
+          parts.push(`[Extracted ${m.scrapedItems.length} item(s): ${previewTitles}]`);
+        }
+        if (m.file) {
+          parts.push(`[Generated file: ${m.file.fileName} (${m.file.rowCount} rows)]`);
+        }
+        return { role: "assistant" as const, content: parts.join("\n"), targetName: m.targetName || undefined };
+      })
+      .filter(item => item.content.length > 0);
+  }
+
+  function startNewConversation() {
+    activeConversationIdRef.current = null;
+    setActiveHistoryId(null);
+    try {
+      sessionStorage.removeItem(getActiveConvStorageKey());
+      sessionStorage.removeItem(ACTIVE_CONV_STORAGE_KEY);
+    } catch (_) {}
+    setConversationStarted(false);
+    setChatMessages([]);
+    setGeminiPrompt("");
+    setSelectedTarget("");
+    setShowPlusMenu(false);
+    setShowMentionDropdown(false);
+    setEditingConvId(null);
+  }
+
+  async function openConversation(convId: string) {
+    activeConversationIdRef.current = convId;
+    setActiveHistoryId(convId);
+    setSelectedTarget("");
+    setShowPlusMenu(false);
+    setShowMentionDropdown(false);
+    try {
+      sessionStorage.setItem(getActiveConvStorageKey(), convId);
+    } catch (_) {}
+
+    try {
+      const res = await apiFetch(`${API}/conversations/${convId}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          startNewConversation();
+          showToast("Conversation no longer exists.", "info");
+        }
+        return;
+      }
+      const data = await res.json();
+      const mapped: ChatMessage[] = (Array.isArray(data?.messages) ? data.messages : []).map((m: any) => ({
+        id: m.id,
+        role: m.role === "user" ? "user" : "assistant",
+        targetName: m.targetName || "",
+        prompt: m.prompt || undefined,
+        content: m.content || undefined,
+        isSchedule: Boolean(m.isSchedule),
+        scheduleDetails: m.scheduleDetails || undefined,
+        status: (m.status || "COMPLETED") as ChatMessage["status"],
+        actions: Array.isArray(m.actions) ? m.actions : undefined,
+        file: m.file || undefined,
+        scrapedItems: parseScrapedItems(m.scrapedItems),
+        createdAt: m.createdAt || new Date().toISOString()
+      }));
+      if (activeConversationIdRef.current !== convId) return;
+      setChatMessages(mapped);
+      setConversationStarted(true);
+    } catch {
+      showToast("Failed to load conversation messages.", "error");
+    }
+  }
+
+  async function ensureConversation(initialTitlePrompt: string): Promise<string | null> {
+    if (activeConversationIdRef.current) {
+      return activeConversationIdRef.current;
+    }
+    try {
+      const res = await apiFetch(`${API}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: buildConversationTitle(initialTitlePrompt) })
+      });
+      if (!res.ok) return null;
+      const conv: Conversation = await res.json();
+      activeConversationIdRef.current = conv.id;
+      setActiveHistoryId(conv.id);
+      try {
+        sessionStorage.setItem(getActiveConvStorageKey(), conv.id);
+      } catch (_) {}
+      setConversations(prev => [conv, ...prev.filter(c => c.id !== conv.id)]);
+      return conv.id;
+    } catch {
+      return null;
+    }
+  }
+
+  async function persistMessageToConversation(
+    convId: string | null,
+    payload: {
+      role: "user" | "assistant";
+      targetName?: string;
+      prompt?: string;
+      content?: string;
+      status: string;
+      taskId?: string;
+      fileId?: string;
+      scrapedItems?: string;
+      isSchedule?: boolean;
+      scheduleDetails?: string;
+    }
+  ) {
+    if (!convId) return;
+    try {
+      const res = await apiFetch(`${API}/conversations/${convId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const nowIso = new Date().toISOString();
+        setConversations(prev => {
+          const target = prev.find(c => c.id === convId);
+          if (!target) return prev;
+          return [{ ...target, updatedAt: nowIso }, ...prev.filter(c => c.id !== convId)];
+        });
+      }
+    } catch (_) {}
+  }
+
+  async function handleDeleteConversation(convId: string) {
+    setConversations(prev => prev.filter(c => c.id !== convId));
+    if (activeConversationIdRef.current === convId || activeHistoryId === convId) {
+      startNewConversation();
+    }
+    try {
+      const r = await apiFetch(`${API}/conversations/${convId}`, { method: "DELETE" });
+      if (r.ok || r.status === 204) {
+        showToast("Conversation deleted.", "info");
+      } else {
+        showToast("Conversation removed.", "info");
+      }
+    } catch {
+      showToast("Conversation removed from view.", "info");
+    }
+  }
+
+  async function executeClearAllConversations() {
+    setConversations([]);
+    startNewConversation();
+    try {
+      await apiFetch(`${API}/conversations`, { method: "DELETE" });
+      showToast("All conversation history cleared.", "info");
+    } catch {
+      showToast("Conversation history cleared.", "info");
+    }
+  }
+
+  function beginRenameConversation(conv: Conversation, e?: React.MouseEvent) {
+    if (e) e.stopPropagation();
+    editTitleCancelRef.current = false;
+    setEditingConvId(conv.id);
+    setEditingConvTitle(conv.title);
+  }
+
+  async function commitRenameConversation(convId: string) {
+    if (editTitleCancelRef.current) {
+      editTitleCancelRef.current = false;
+      setEditingConvId(null);
+      return;
+    }
+    const trimmed = editingConvTitle.trim();
+    const existing = conversations.find(c => c.id === convId);
+    setEditingConvId(null);
+    if (!trimmed || !existing || trimmed === existing.title) {
+      return;
+    }
+    const prevTitle = existing.title;
+    const clipped = trimmed.length > 120 ? trimmed.slice(0, 120) : trimmed;
+    setConversations(prev => prev.map(c => (c.id === convId ? { ...c, title: clipped } : c)));
+    try {
+      const res = await apiFetch(`${API}/conversations/${convId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: clipped })
+      });
+      if (!res.ok) throw new Error("Failed to rename conversation");
+      const updated: Conversation = await res.json();
+      setConversations(prev => prev.map(c => (c.id === convId ? { ...c, title: updated.title, updatedAt: updated.updatedAt } : c)));
+    } catch {
+      setConversations(prev => prev.map(c => (c.id === convId ? { ...c, title: prevTitle } : c)));
+      showToast("Failed to rename conversation.", "error");
     }
   }
 
   useEffect(() => {
-    void loadData();
+    if (!currentUser) return;
+    void (async () => {
+      const { conversations: loadedConvs, convOk } = await loadData();
+      if (convOk) {
+        try {
+          const key = getActiveConvStorageKey(currentUser.id);
+          const savedConvId = sessionStorage.getItem(key);
+          if (savedConvId && loadedConvs.some(c => c.id === savedConvId)) {
+            await openConversation(savedConvId);
+          } else if (savedConvId) {
+            sessionStorage.removeItem(key);
+          }
+        } catch (_) {}
+      }
+    })();
+    void loadPersonalization();
     const interval = setInterval(loadData, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser?.id]);
 
   async function handleAddConnection(e: React.FormEvent) {
     e.preventDefault();
@@ -672,7 +1731,7 @@ export default function App() {
 
     setBusy(true);
     try {
-      const r = await fetch(`${API}/connections`, {
+      const r = await apiFetch(`${API}/connections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newConnName.trim(), websiteUrl: newConnUrl.trim() })
@@ -697,7 +1756,7 @@ export default function App() {
     setBusy(true);
     showToast("Agent executing Observe-Plan-Act-Verify cycle...", "info");
     try {
-      const r = await fetch(`${API}/tasks`, {
+      const r = await apiFetch(`${API}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ connectionId: selectedConnId, prompt: taskPrompt })
@@ -750,7 +1809,7 @@ export default function App() {
 
     setBusy(true);
     try {
-      const r = await fetch(`${API}/connections`, {
+      const r = await apiFetch(`${API}/connections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: quickConnName.trim(), websiteUrl: quickConnUrl.trim() })
@@ -817,6 +1876,8 @@ export default function App() {
       const query = textBeforeCursor.slice(lastAtIndex + 1);
       if (!/\s/.test(query)) {
         setMentionFilter(query.toLowerCase());
+        setMentionActiveIndex(0);
+        setShowPlusMenu(false);
         setShowMentionDropdown(true);
         return;
       }
@@ -824,22 +1885,42 @@ export default function App() {
     setShowMentionDropdown(false);
   }
 
+  function stripActiveMentionQuery() {
+    const cursorPos = geminiTextareaRef.current?.selectionStart ?? geminiPrompt.length;
+    const textBeforeCursor = geminiPrompt.slice(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+    if (lastAtIndex !== -1) {
+      const prefix = geminiPrompt.slice(0, lastAtIndex);
+      const afterCursor = geminiPrompt.slice(cursorPos).replace(/^\s+/, "");
+      setGeminiPrompt((prefix + afterCursor).trimStart());
+    }
+  }
+
   function selectMentionTarget(targetId: string, targetLabel: string) {
     setSelectedTarget(targetId);
     setShowMentionDropdown(false);
 
-    // Replace the trailing @query with @targetLabel
-    const lastAtIndex = geminiPrompt.lastIndexOf("@");
+    // Replace the active @query at cursor with @targetLabel
+    const cursorPos = geminiTextareaRef.current?.selectionStart ?? geminiPrompt.length;
+    const textBeforeCursor = geminiPrompt.slice(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
     if (lastAtIndex !== -1) {
       const prefix = geminiPrompt.slice(0, lastAtIndex);
-      const afterAt = geminiPrompt.slice(lastAtIndex);
-      const spaceIdx = afterAt.indexOf(" ");
-      const suffix = spaceIdx !== -1 ? afterAt.slice(spaceIdx) : " ";
-      setGeminiPrompt(`${prefix}@${targetLabel}${suffix}`);
+      const afterCursor = geminiPrompt.slice(cursorPos);
+      const needsSpace = !afterCursor.startsWith(" ");
+      const nextValue = `${prefix}@${targetLabel}${needsSpace ? " " : ""}${afterCursor}`;
+      const nextCursorPos = prefix.length + targetLabel.length + 2;
+      setGeminiPrompt(nextValue);
+      setTimeout(() => {
+        if (geminiTextareaRef.current) {
+          geminiTextareaRef.current.focus();
+          geminiTextareaRef.current.setSelectionRange(nextCursorPos, nextCursorPos);
+        }
+      }, 0);
     } else {
       setGeminiPrompt(prev => `@${targetLabel} ${prev}`.trim() + " ");
+      geminiTextareaRef.current?.focus();
     }
-    geminiTextareaRef.current?.focus();
   }
 
   async function toggleTaskTrace(taskId: string) {
@@ -850,12 +1931,89 @@ export default function App() {
     setExpandedTraceTaskId(taskId);
     if (!taskTraceCache[taskId]) {
       try {
-        const r = await fetch(`${API}/tasks/${taskId}`);
+        const r = await apiFetch(`${API}/tasks/${taskId}`);
         if (r.ok) {
           const detail = await r.json();
           setTaskTraceCache(prev => ({ ...prev, [taskId]: detail.actions || [] }));
         }
       } catch (_) {}
+    }
+  }
+
+  function isConversationalPrompt(promptText: string): boolean {
+    const clean = promptText.trim();
+    if (!clean) return true;
+    // Greetings / acknowledgements / assistant capability questions
+    if (/^(hi|hy|hello|hey|hola|namaste|yo|thanks|thank\s*you|ok|okay|good\s*(morning|evening|afternoon)|who\s*are\s*you|what\s*can\s*you\s*do|help)\b[!.?]*$/i.test(clean)) {
+      return true;
+    }
+    // Explicit in-chat memory statements or recalls
+    if (/^(remember|note\s+that|keep\s+in\s+mind)\b/i.test(clean)) return true;
+    if (/^my\s+[a-z0-9 _-]{2,30}\s+(?:is|=|:)\s+.+$/i.test(clean)) return true;
+    if (/^(what(?:'s|\s+is|\s+was)|tell\s+me|who\s+am\s+i)\b/i.test(clean) && !/\b(page|website|site|url|design|image|file|tab|screen)\b/i.test(clean)) {
+      return true;
+    }
+    // In-chat summaries / follow-up questions about already-extracted results (not requesting a new browser action/download)
+    if (/\b(summarize|recap|explain|how\s+many|what\s+did\s+(?:i|we|you)|above\s+(?:result|item|chat|message))\b/i.test(clean) && !/\b(download|export|save|open|click|fill|upload|submit|scrape|extract|fetch)\b/i.test(clean)) {
+      return true;
+    }
+    // Personalization summary queries (not form fills or uploads)
+    if (/\b(my\s+(?:personal\s*(?:data|info|details|notes|profile)|resume|cv|bio)|uploaded\s+files?)\b/i.test(clean) && !/\b(fill|autofill|auto-fill|upload|attach|apply|submit|enter|use)\b/i.test(clean)) {
+      return true;
+    }
+    return false;
+  }
+
+  function isExplicitBrowserFollowupAction(promptText: string): boolean {
+    const clean = promptText.trim();
+    if (!clean || isConversationalPrompt(clean)) return false;
+    if (/https?:\/\//i.test(clean)) return true;
+    return /\b(open|find|search|scrape|extract|download|export|save|fetch|get|click|fill|autofill|auto-fill|upload|submit|apply|login|sign\s*in|scroll|visit|navigate|go\s+to|reload|refresh)\b/i.test(clean) ||
+      /\b(all\s+(?:images?|imgs?|photos?|pictures?|designs?|files?|links?|projects?|templates?)|my\s+(?:designs?|projects?|uploads?|files?|orders?)|next\s+page|run\s+again|try\s+again)\b/i.test(clean);
+  }
+
+  function inferActiveConversationTarget(promptText: string): string {
+    // 1. Inherit the latest platform targeted earlier in THIS conversation
+    for (let i = chatMessages.length - 1; i >= 0; i--) {
+      const tName = (chatMessages[i].targetName || "").trim();
+      if (!tName) continue;
+      if (tName.toLowerCase() === "all") return "all";
+      const matched = connections.find(c => c.name.toLowerCase() === tName.toLowerCase());
+      if (matched) return matched.id;
+    }
+    // 2. If user only has 1 connected website and clearly gave a browser action, auto-target it
+    const looksLikeWebAction = /\b(open|find|search|scrape|extract|download|export|save|fetch|get|click|fill|autofill|auto-fill|upload|submit|apply|login|sign\s*in|scroll|check|visit|navigate|designs?|images?|imgs?|photos?|pictures?|files?|pdfs?|links?|projects?|templates?|orders?|jobs?)\b/i.test(promptText);
+    if (connections.length === 1 && looksLikeWebAction) {
+      return connections[0].id;
+    }
+    return "";
+  }
+
+  function getActiveThreadTargetLabel(): string {
+    for (let i = chatMessages.length - 1; i >= 0; i--) {
+      const tName = (chatMessages[i].targetName || "").trim();
+      if (tName) return tName;
+    }
+    return "";
+  }
+
+  async function triggerGeneratedFileDownload(file?: GeneratedFile): Promise<boolean> {
+    if (!file) return false;
+    try {
+      const res = await apiFetch(`${API}/files/${file.id}/download`);
+      if (!res.ok) return false;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file.fileName || "extracted-data.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -883,12 +2041,14 @@ export default function App() {
       }
     }
 
-    // Only fallback to targetOverride or selectedTarget if the user didn't write an explicit mention
+    // Fallback to targetOverride, selectedTarget, or active conversation platform continuity
     if (!resolvedTarget) {
       if (targetOverride) {
         resolvedTarget = targetOverride;
       } else if (selectedTarget) {
         resolvedTarget = selectedTarget;
+      } else if (isExplicitBrowserFollowupAction(rawPrompt)) {
+        resolvedTarget = inferActiveConversationTarget(rawPrompt);
       }
     }
 
@@ -925,78 +2085,121 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
+    // Snapshot prior turns of THIS conversation only before adding the new turn
+    const historyWindow = buildConversationContextWindow(chatMessages);
+
     setChatMessages(prev => [...prev, newUserMsg, newAssistMsg]);
     setGeminiPrompt("");
+    setSelectedTarget("");
+
+    const convIdPromise = ensureConversation(rawPrompt).then(async convId => {
+      if (convId) {
+        await persistMessageToConversation(convId, {
+          role: "user",
+          targetName: targetLabel,
+          prompt: rawPrompt,
+          status: "COMPLETED"
+        });
+      }
+      return convId;
+    });
 
     // If NO target platform was specified (User just typed "hy", asked a question, or general query)
     if (!resolvedTarget) {
+      if (isScheduleReq && rawPrompt.trim().length > 6) {
+        const detectedTime = parseDailyScheduleTimeFromPrompt(rawPrompt);
+        const detectedCadence = parseCadenceFromPrompt(rawPrompt);
+        (async () => {
+          try {
+            await apiFetch(`${API}/schedules`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: `${detectedCadence === "HOURLY" ? "Hourly" : detectedCadence === "WEEKDAYS" ? "Weekday" : "Daily"} AI Task (${detectedTime})`,
+                connectionId: null,
+                taskMode: "AI_CHAT",
+                cadence: detectedCadence,
+                requirements: rawPrompt,
+                preferredLocation: "",
+                scheduleTime: detectedTime,
+                timezone: "Asia/Kolkata",
+                autoApply: false,
+                maxApplyPerRun: 5,
+                enabled: true
+              })
+            });
+            await loadData();
+            showToast(`Registered ${detectedCadence.toLowerCase()} AI schedule at ${detectedTime}!`, "success");
+          } catch (_) {}
+        })();
+      }
       const isGreeting = /^(hi|hy|hello|hey|hola|namaste|yo|good\s*(morning|evening|afternoon)|who\s*are\s*you|what\s*can\s*you\s*do|help)\b/i.test(rawPrompt);
       const isNameQuery = /what(?:'s|\s+is)\s+my\s+name|who\s+am\s+i/i.test(rawPrompt);
 
       (async () => {
         try {
-          const res = await fetch(`${WORKER_API}/v1/chat`, {
+          const res = await apiFetch(`${API}/ai/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: rawPrompt })
+            body: JSON.stringify({
+              prompt: rawPrompt,
+              history: historyWindow,
+              personalization: buildClientPersonalizationPayload()
+            })
           });
           if (res.ok) {
             const data = await res.json();
+            if (data) {
+              setAiStatus(prev => prev.isConfigured ? { ...prev, lastError: data.aiError || undefined } : prev);
+            }
             if (data && data.reply) {
-              await new Promise(r => setTimeout(r, 650));
+              await new Promise(r => setTimeout(r, 450));
               setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "COMPLETED", content: data.reply } : m));
+              const convId = await convIdPromise;
+              await persistMessageToConversation(convId, {
+                role: "assistant",
+                content: data.reply,
+                status: "COMPLETED"
+              });
               return;
             }
           }
         } catch (_) {}
 
-        setTimeout(() => {
-          setChatMessages(prev => prev.map(m => {
-            if (m.id === assistMsgId) {
-              if (isNameQuery) {
-                return {
-                  ...m,
-                  status: "COMPLETED",
-                  content: "Your name is Saurabh Patel."
-                };
-              }
-              if (isGreeting) {
-                return {
-                  ...m,
-                  status: "COMPLETED",
-                  content: `Hello Saurabh! I am Navio, your Universal Browser AI Agent.
+        await new Promise(r => setTimeout(r, 650));
+        const savedFirstName = personalProfile.enabled && personalProfile.fullName.trim()
+          ? personalProfile.fullName.trim().split(/\s+/)[0]
+          : "";
+        let fallbackReply: string;
+        if (isNameQuery) {
+          fallbackReply = personalProfile.enabled && personalProfile.fullName.trim()
+            ? `Your name is **${personalProfile.fullName.trim()}**.`
+            : "No personal name is saved yet. Open **Personalization** in the sidebar to enter your details or upload files.";
+        } else if (isGreeting) {
+          fallbackReply = `${savedFirstName ? `Hello ${savedFirstName}!` : "Hello!"} I am Navio, your Universal Browser AI Agent.\n\nI can automate web actions, navigate portals, auto-fill credentials, and extract data.\n\n**How to give tasks:**\n• **Target a specific website:** Type \`@<name> <task>\` (e.g. \`@canva open designs\`) or click \`+\` to pick a platform.\n• **Broadcast to all websites:** Type \`@all <task>\` to run across all registered portals simultaneously.\n• **Direct URL:** Mention any URL (e.g. \`https://google.com search developer jobs\`).`;
+        } else {
+          fallbackReply = `Instruction received: "${rawPrompt}".\n\nPlease specify which website you want me to execute this on:\n${connections.length > 0 ? connections.map(c => `• **@${c.name}** (${c.websiteUrl})`).join("\n") : "• No websites connected yet — click '+' to connect one."}\n\nYou can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast across all platforms.`;
+        }
 
-I can automate web actions, navigate portals, auto-fill credentials, and extract data.
-
-**How to give tasks:**
-• **Target a specific website:** Type \`@<name> <task>\` (e.g. \`@canva open designs\`) or click \`+\` to pick a platform.
-• **Broadcast to all websites:** Type \`@all <task>\` to run across all registered portals simultaneously.
-• **Direct URL:** Mention any URL (e.g. \`https://google.com search developer jobs\`).`
-                };
-              }
-              return {
-                ...m,
-                status: "COMPLETED",
-                content: `Instruction received: "${rawPrompt}".
-
-Please specify which website you want me to execute this on:
-${connections.length > 0 ? connections.map(c => `• **@${c.name}** (${c.websiteUrl})`).join("\n") : "• No websites connected yet — click '+' to connect one."}
-
-You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast across all platforms.`
-              };
-            }
-            return m;
-          }));
-        }, 850);
+        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "COMPLETED", content: fallbackReply } : m));
+        const convId = await convIdPromise;
+        await persistMessageToConversation(convId, {
+          role: "assistant",
+          content: fallbackReply,
+          status: "COMPLETED"
+        });
       })();
       return;
     }
 
     if (resolvedTarget === "all") {
       if (connections.length === 0) {
+        const failText = "No websites connected yet. Please add a website connection.";
         showToast("No websites connected yet. Register a website to begin.", "info");
         setShowQuickAddModal(true);
-        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: "No websites connected yet. Please add a website connection." } : m));
+        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: failText } : m));
+        const convId = await convIdPromise;
+        await persistMessageToConversation(convId, { role: "assistant", targetName: targetLabel, content: failText, status: "FAILED" });
         return;
       }
       setBusy(true);
@@ -1004,37 +2207,55 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
       try {
         const cleanPrompt = rawPrompt.replace(/@all\s*/gi, "").trim() || rawPrompt;
         for (const conn of connections) {
-          await fetch(`${API}/tasks`, {
+          await apiFetch(`${API}/tasks`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ connectionId: conn.id, prompt: cleanPrompt })
+            body: JSON.stringify({ connectionId: conn.id, prompt: cleanPrompt, history: historyWindow })
           });
         }
         await loadData();
+        const summaryReply = isScheduleReq
+          ? `Automation scheduled across all ${connections.length} registered platforms. The agent will run recurring inspections on each portal.`
+          : `Executed Observe-Plan-Act-Verify cycle across all ${connections.length} registered platforms. Navigation links and DOM records updated.`;
         setChatMessages(prev => prev.map(m => {
           if (m.id === assistMsgId) {
             return {
               ...m,
               status: "COMPLETED",
-              content: isScheduleReq
-                ? `Automation scheduled across all ${connections.length} registered platforms. The agent will run recurring inspections on each portal.`
-                : `Executed Observe-Plan-Act-Verify cycle across all ${connections.length} registered platforms. Navigation links and DOM records updated.`
+              content: summaryReply
             };
           }
           return m;
         }));
+        const convId = await convIdPromise;
+        await persistMessageToConversation(convId, {
+          role: "assistant",
+          targetName: targetLabel,
+          content: summaryReply,
+          status: "COMPLETED",
+          isSchedule: isScheduleReq,
+          scheduleDetails: isScheduleReq ? "Recurring schedule registered for execution cycle." : undefined
+        });
         showToast(`All ${connections.length} tasks executed successfully.`, "success");
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Multi-target execution failed";
         setChatMessages(prev => prev.map(m => {
           if (m.id === assistMsgId) {
             return {
               ...m,
               status: "FAILED",
-              content: err instanceof Error ? err.message : "Multi-target execution failed"
+              content: errMsg
             };
           }
           return m;
         }));
+        const convId = await convIdPromise;
+        await persistMessageToConversation(convId, {
+          role: "assistant",
+          targetName: targetLabel,
+          content: errMsg,
+          status: "FAILED"
+        });
         showToast(err instanceof Error ? err.message : "Execution failed", "error");
       } finally {
         setBusy(false);
@@ -1043,9 +2264,12 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
       // Single connection execution
       const targetConn = connections.find(c => c.id === resolvedTarget);
       if (!targetConn) {
+        const failText = "Target website not found. Please connect a website first.";
         showToast("Target website not found. Please select a valid connection.", "error");
         setShowQuickAddModal(true);
-        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: "Target website not found. Please connect a website first." } : m));
+        setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: failText } : m));
+        const convId = await convIdPromise;
+        await persistMessageToConversation(convId, { role: "assistant", targetName: targetLabel, content: failText, status: "FAILED" });
         return;
       }
 
@@ -1055,10 +2279,35 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
         const regex = new RegExp(`@${targetConn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*`, "gi");
         const cleanPrompt = rawPrompt.replace(regex, "").trim() || rawPrompt;
 
-        const r = await fetch(`${API}/tasks`, {
+        if (isScheduleReq) {
+          const detectedTime = parseDailyScheduleTimeFromPrompt(cleanPrompt);
+          const detectedCadence = parseCadenceFromPrompt(cleanPrompt);
+          try {
+            await apiFetch(`${API}/schedules`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: `${detectedCadence === "HOURLY" ? "Hourly" : detectedCadence === "WEEKDAYS" ? "Weekday" : "Daily"} ${targetConn.name} (${detectedTime})`,
+                connectionId: targetConn.id,
+                taskMode: "AUTO",
+                cadence: detectedCadence,
+                requirements: cleanPrompt,
+                preferredLocation: personalProfile.location || "",
+                scheduleTime: detectedTime,
+                timezone: "Asia/Kolkata",
+                autoApply: /\b(apply|submit)\b/i.test(cleanPrompt) && /(job|jobs|naukri|linkedin|indeed|internshala|foundit)/i.test(cleanPrompt + " " + targetConn.name),
+                maxApplyPerRun: 5,
+                enabled: true
+              })
+            });
+            showToast(`Registered ${detectedCadence.toLowerCase()} schedule at ${detectedTime} for ${targetConn.name}!`, "success");
+          } catch (_) {}
+        }
+
+        const r = await apiFetch(`${API}/tasks`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ connectionId: targetConn.id, prompt: cleanPrompt })
+          body: JSON.stringify({ connectionId: targetConn.id, prompt: cleanPrompt, history: historyWindow })
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || "Task execution failed");
@@ -1068,12 +2317,12 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
         let latestFile: GeneratedFile | undefined;
         let taskActions: Action[] = [];
         try {
-          const detailRes = await fetch(`${API}/tasks/${data.id}`);
+          const detailRes = await apiFetch(`${API}/tasks/${data.id}`);
           if (detailRes.ok) {
             const detail = await detailRes.json();
             taskActions = detail.actions || [];
           }
-          const fileRes = await fetch(`${API}/files`);
+          const fileRes = await apiFetch(`${API}/files`);
           if (fileRes.ok) {
             const filesData: GeneratedFile[] = await fileRes.json();
             setFiles(filesData);
@@ -1092,29 +2341,190 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
               status: data.status,
               content: replyContent,
               actions: taskActions,
-              file: latestFile
+              file: latestFile,
+              scrapedItems: parseScrapedItems(data.extractedItems)
             };
           }
           return m;
         }));
 
+        const convId = await convIdPromise;
+        await persistMessageToConversation(convId, {
+          role: "assistant",
+          targetName: targetConn.name,
+          content: replyContent,
+          status: data.status === "FAILED" ? "FAILED" : "COMPLETED",
+          taskId: data.id,
+          fileId: latestFile?.id,
+          scrapedItems: data.extractedItems || undefined,
+          isSchedule: isScheduleReq,
+          scheduleDetails: isScheduleReq ? "Recurring schedule registered for execution cycle." : undefined
+        });
+
+        if (/\b(download|export|save)\b/i.test(rawPrompt)) {
+          const fallbackPrevFile = [...chatMessages].reverse().find(m => m.file)?.file;
+          const fileToDownload = latestFile || fallbackPrevFile;
+          if (fileToDownload) {
+            const downloaded = await triggerGeneratedFileDownload(fileToDownload);
+            if (downloaded) {
+              showToast(`Downloading ${fileToDownload.fileName}...`, "success");
+            }
+          }
+        }
+
         showToast(`Task execution on ${targetConn.name} ${data.status.toLowerCase()}.`, data.status === "COMPLETED" ? "success" : "error");
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Task execution failed";
         setChatMessages(prev => prev.map(m => {
           if (m.id === assistMsgId) {
             return {
               ...m,
               status: "FAILED",
-              content: err instanceof Error ? err.message : "Task execution failed"
+              content: errMsg
             };
           }
           return m;
         }));
+        const convId = await convIdPromise;
+        await persistMessageToConversation(convId, {
+          role: "assistant",
+          targetName: targetConn.name,
+          content: errMsg,
+          status: "FAILED"
+        });
         showToast(err instanceof Error ? err.message : "Task execution failed", "error");
       } finally {
         setBusy(false);
       }
     }
+  }
+
+  function renderScrapedArtifacts(items?: ScrapedItem[], file?: GeneratedFile) {
+    const imageItems = (items || []).filter(item => Boolean(item.imageUrl));
+    const fileItems = (items || []).filter(item => !item.imageUrl && (item.href || item.fileExt));
+    const visibleFiles = fileItems.slice(0, 12);
+
+    return (
+      <>
+        {imageItems.length > 0 && (
+          <div className="geminiScrapedSection">
+            <div className="geminiScrapedSectionHeader">
+              <ImageIcon size={14} />
+              <span>Scraped Images &amp; Visuals ({imageItems.length})</span>
+            </div>
+            <div className="geminiScrapedImageGrid">
+              {imageItems.slice(0, 24).map((item, idx) => {
+                const targetHref = item.href || item.imageUrl;
+                return (
+                  <div className="geminiScrapedImageCard" key={`${item.imageUrl}-${idx}`}>
+                    <a
+                      href={targetHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="geminiScrapedThumbLink"
+                      title={item.title}
+                    >
+                      <img
+                        src={item.imageUrl}
+                        alt={item.title}
+                        loading="lazy"
+                        onError={e => {
+                          const card = e.currentTarget.closest(".geminiScrapedImageCard") as HTMLElement | null;
+                          if (card) card.style.display = "none";
+                        }}
+                      />
+                    </a>
+                    <div className="geminiScrapedCardFooter">
+                      <span className="geminiScrapedCardTitle" title={item.title}>
+                        {item.title}
+                      </span>
+                      {targetHref && (
+                        <a
+                          href={targetHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="geminiScrapedIconBtn"
+                          title="Open"
+                          aria-label={`Open ${item.title}`}
+                        >
+                          <ExternalLink size={13} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {visibleFiles.length > 0 && (
+          <div className="geminiScrapedSection">
+            <div className="geminiScrapedSectionHeader">
+              <FileText size={14} />
+              <span>Scraped Files &amp; Links ({fileItems.length})</span>
+            </div>
+            <div className="geminiScrapedFilesList">
+              {visibleFiles.map((item, idx) => (
+                <div className="geminiScrapedFileRow" key={`${item.href || item.title}-${idx}`}>
+                  <div className="geminiScrapedFileInfo">
+                    <FileText size={15} className="geminiScrapedFileIcon" />
+                    <div className="geminiScrapedFileText">
+                      <b title={item.title}>{item.title}</b>
+                      {item.href && <small title={item.href}>{item.href}</small>}
+                    </div>
+                  </div>
+                  <div className="geminiScrapedFileActions">
+                    {(item.fileExt || item.category) && (
+                      <span className="geminiScrapedExtTag">{item.fileExt || item.category}</span>
+                    )}
+                    {item.href && (
+                      <a
+                        href={item.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="geminiScrapedIconBtn"
+                        title={item.category === "File" ? "Download / Open file" : "Open link"}
+                        aria-label={`Open ${item.title}`}
+                        download={item.category === "File" ? true : undefined}
+                      >
+                        {item.category === "File" ? <Download size={14} /> : <ExternalLink size={14} />}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {fileItems.length > visibleFiles.length && (
+                <div className="geminiScrapedMoreNote">
+                  +{fileItems.length - visibleFiles.length} more items included in the CSV export below.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {file && (
+          <div className="geminiGeneratedFileBadge">
+            <div className="geminiFileLeft">
+              <FileSpreadsheet size={18} color="#10b981" style={{ flexShrink: 0 }} />
+              <div className="geminiFileMeta">
+                <b title={file.fileName}>{file.fileName}</b>
+                <small>{file.rowCount} records extracted</small>
+              </div>
+            </div>
+            <a
+              href={`${API}/files/${file.id}/download${authToken ? `?token=${encodeURIComponent(authToken)}` : ""}`}
+              className="geminiFileDownloadIconBtn"
+              title={`Download ${file.fileName}`}
+              aria-label={`Download ${file.fileName}`}
+              download
+            >
+              <Download size={16} />
+            </a>
+          </div>
+        )}
+      </>
+    );
   }
 
   function renderThemeToggle(isDashboard = false) {
@@ -1131,15 +2541,130 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
     );
   }
 
-  function renderGeminiInputCapsule() {
+  function renderTopProfileMenu() {
+    if (!currentUser) return null;
+    const initials = (currentUser.fullName || currentUser.email || "N")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(p => p[0].toUpperCase())
+      .join("");
+
     return (
-      <div className="geminiPillCapsule">
+      <div className="topProfileWrap" ref={topProfileMenuRef}>
+        <button
+          type="button"
+          className="topProfileTrigger"
+          onClick={() => setShowTopProfileMenu(prev => !prev)}
+          title={`${currentUser.fullName} (${currentUser.email})`}
+          aria-expanded={showTopProfileMenu}
+        >
+          {currentUser.avatarUrl ? (
+            <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="topProfileAvatarImg" />
+          ) : (
+            <div className="topProfileAvatarFallback">{initials}</div>
+          )}
+          <span className="topProfileName">{currentUser.fullName}</span>
+          <ChevronDown size={14} className="topProfileChevron" />
+        </button>
+
+        {showTopProfileMenu && (
+          <div className="topProfileDropdown" role="menu">
+            <div className="topProfileDropHead">
+              {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="sidebarUserAvatarImg" />
+              ) : (
+                <div className="sidebarUserAvatarFallback">{initials}</div>
+              )}
+              <div className="topProfileDropMeta">
+                <b>{currentUser.fullName}</b>
+                <small>{currentUser.email}</small>
+              </div>
+            </div>
+            <div className="topProfileDropDivider" />
+            <button
+              type="button"
+              className="topProfileDropItem"
+              onClick={() => {
+                setShowTopProfileMenu(false);
+                setActiveTab("personalization");
+              }}
+            >
+              <User size={14} /> Personalization
+            </button>
+            <button
+              type="button"
+              className="topProfileDropItem"
+              onClick={() => {
+                setShowTopProfileMenu(false);
+                setActiveTab("settings");
+              }}
+            >
+              <Settings size={14} /> Settings &amp; AI Keys
+            </button>
+            <div className="topProfileDropDivider" />
+            <button
+              type="button"
+              className="topProfileDropItem danger"
+              onClick={() => {
+                setShowTopProfileMenu(false);
+                handleLogout();
+              }}
+            >
+              <LogOut size={14} /> Sign Out
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderGeminiInputCapsule() {
+    const filteredMentionConnections = connections.filter(
+      c => !mentionFilter || c.name.toLowerCase().includes(mentionFilter) || c.websiteUrl.toLowerCase().includes(mentionFilter)
+    );
+    const includeAllMention = !mentionFilter || "all".includes(mentionFilter) || "all connected platforms".includes(mentionFilter);
+    type MentionOption =
+      | { kind: "connection"; id: string; label: string; subtitle: string; status: string }
+      | { kind: "all"; id: "all"; label: "all"; subtitle: string }
+      | { kind: "add"; id: "__add__"; label: string; subtitle: string };
+
+    const mentionOptions: MentionOption[] = [
+      ...filteredMentionConnections.map(c => ({
+        kind: "connection" as const,
+        id: c.id,
+        label: c.name,
+        subtitle: c.websiteUrl,
+        status: c.status
+      })),
+      ...(includeAllMention
+        ? [{ kind: "all" as const, id: "all" as const, label: "all" as const, subtitle: "Broadcast prompt to all websites" }]
+        : []),
+      { kind: "add" as const, id: "__add__" as const, label: "+ Connect new website...", subtitle: "Register custom URL or portal" }
+    ];
+    const safeMentionIdx = Math.min(mentionActiveIndex, Math.max(0, mentionOptions.length - 1));
+
+    const handleSelectMentionOption = (opt: MentionOption) => {
+      if (opt.kind === "add") {
+        setShowMentionDropdown(false);
+        stripActiveMentionQuery();
+        setShowQuickAddModal(true);
+        return;
+      }
+      selectMentionTarget(opt.id, opt.label);
+    };
+
+    return (
+      <div className="geminiPillCapsule" ref={mentionMenuRef}>
         {/* Left Plus / Close Menu Button */}
         <div style={{ position: "relative" }} ref={plusMenuRef}>
           <button
             type="button"
             className={`geminiPlusCircleBtn ${showPlusMenu ? "active" : ""}`}
-            onClick={() => setShowPlusMenu(prev => !prev)}
+            onClick={() => {
+              setShowMentionDropdown(false);
+              setShowPlusMenu(prev => !prev);
+            }}
             title={showPlusMenu ? "Close menu" : "Tools and platforms"}
           >
             {showPlusMenu ? <X size={18} /> : <Plus size={20} />}
@@ -1158,7 +2683,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                   <Globe2 size={16} />
                 </div>
                 <div>
-                  <b>@all (All Connected Platforms)</b>
+                  <b>All Connected Platforms</b>
                   <small>Broadcast prompt to all websites</small>
                 </div>
               </div>
@@ -1179,6 +2704,22 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 </div>
               </div>
 
+              <div
+                className="geminiPlusMenuItem"
+                onClick={() => {
+                  setShowPlusMenu(false);
+                  setActiveTab("personalization");
+                }}
+              >
+                <div className="geminiPlusMenuIcon">
+                  <User size={16} color="#38bdf8" />
+                </div>
+                <div>
+                  <b>Personalization (Text &amp; Files)</b>
+                  <small>{personalProfile.enabled ? `${personalFiles.length} file(s) • auto-used when needed` : "Currently paused"}</small>
+                </div>
+              </div>
+
               {connections.length > 0 && (
                 <>
                   <div className="geminiPlusMenuDivider" />
@@ -1190,10 +2731,10 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                       onClick={() => selectPlatformFromMenu(c.id, c.name)}
                     >
                       <div className="geminiPlusMenuIcon">
-                        <Bot size={16} />
+                        <ConnectorLogo name={c.name} websiteUrl={c.websiteUrl} size={18} />
                       </div>
                       <div>
-                        <b>@{c.name}</b>
+                        <b>{c.name}</b>
                         <small>{c.websiteUrl}</small>
                       </div>
                       <span className={`tag ${c.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`} style={{ marginLeft: "auto", fontSize: "10px" }}>
@@ -1207,6 +2748,65 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
           )}
         </div>
 
+        {/* @ Mention Autocomplete Dropdown (Gemini style) */}
+        {showMentionDropdown && (
+          <div className={`geminiPlusMenuDropdown geminiMentionDropdown ${conversationStarted ? "openUp" : "openDown"}`}>
+            <div className="geminiPlusMenuSectionTitle">
+              {connections.length > 0 ? "CONNECTED WEBSITES" : "MENTION A WEBSITE"}
+            </div>
+            {filteredMentionConnections.length === 0 && (
+              <div className="geminiMentionEmpty">
+                {connections.length === 0
+                  ? "No websites connected yet."
+                  : `No connected website matches "@${mentionFilter}".`}
+              </div>
+            )}
+            {mentionOptions.map((opt, idx) => {
+              const isHighlighted = idx === safeMentionIdx;
+
+              return (
+                <React.Fragment key={opt.id}>
+                  {opt.kind === "add" && <div className="geminiPlusMenuDivider" />}
+                  <div
+                    className={`geminiPlusMenuItem ${isHighlighted ? "selected" : ""}`}
+                    onMouseEnter={() => setMentionActiveIndex(idx)}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => handleSelectMentionOption(opt)}
+                  >
+                    <div
+                      className={`geminiPlusMenuIcon ${
+                        opt.kind === "all" ? "allIcon" : opt.kind === "add" ? "addIcon" : ""
+                      }`}
+                    >
+                      {opt.kind === "all" ? (
+                        <Globe2 size={16} />
+                      ) : opt.kind === "add" ? (
+                        <Plus size={16} />
+                      ) : (
+                        <ConnectorLogo name={opt.label} websiteUrl={opt.subtitle} size={18} />
+                      )}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <b>{opt.kind === "all" ? "All Connected Platforms" : opt.label}</b>
+                      <small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {opt.subtitle}
+                      </small>
+                    </div>
+                    {opt.kind === "connection" && (
+                      <span
+                        className={`tag ${opt.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`}
+                        style={{ marginLeft: "auto", fontSize: "10px", flexShrink: 0 }}
+                      >
+                        {opt.status}
+                      </span>
+                    )}
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+
         {/* Input Textarea */}
         <textarea
           ref={geminiTextareaRef}
@@ -1215,6 +2815,28 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
           value={geminiPrompt}
           onChange={handleGeminiPromptChange}
           onKeyDown={e => {
+            if (showMentionDropdown && mentionOptions.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMentionActiveIndex(prev => (prev + 1) % mentionOptions.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setMentionActiveIndex(prev => (prev - 1 + mentionOptions.length) % mentionOptions.length);
+                return;
+              }
+              if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+                e.preventDefault();
+                handleSelectMentionOption(mentionOptions[safeMentionIdx]);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setShowMentionDropdown(false);
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               if (!busy && geminiPrompt.trim()) {
@@ -1222,6 +2844,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
               }
             } else if (e.key === "Escape") {
               setShowPlusMenu(false);
+              setShowMentionDropdown(false);
             }
           }}
           placeholder="Ask Gemini"
@@ -1243,7 +2866,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
 
   async function viewTaskDetail(id: string) {
     try {
-      const r = await fetch(`${API}/tasks/${id}`);
+      const r = await apiFetch(`${API}/tasks/${id}`);
       if (r.ok) {
         const detail = await r.json();
         setSelectedTaskDetail(detail);
@@ -1253,7 +2876,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
 
   async function handleApprove(id: string) {
     try {
-      const r = await fetch(`${API}/approvals/${id}/approve`, { method: "POST" });
+      const r = await apiFetch(`${API}/approvals/${id}/approve`, { method: "POST" });
       if (r.ok) {
         showToast("Action approved! Agent proceeding with execution.", "success");
         await loadData();
@@ -1263,7 +2886,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
 
   async function handleReject(id: string) {
     try {
-      const r = await fetch(`${API}/approvals/${id}/reject`, { method: "POST" });
+      const r = await apiFetch(`${API}/approvals/${id}/reject`, { method: "POST" });
       if (r.ok) {
         showToast("Action rejected. Consequential action blocked.", "error");
         await loadData();
@@ -1275,7 +2898,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
     e.preventDefault();
     setBusy(true);
     try {
-      const r = await fetch(`${API}/social/prepare-post`, {
+      const r = await apiFetch(`${API}/social/prepare-post`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: postContent, platforms: selectedPlatforms })
@@ -1293,6 +2916,314 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
   }
 
   const pendingApprovalsCount = approvals.filter(a => a.approvalStatus === "PENDING").length;
+
+  const userInitials = (currentUser?.fullName || currentUser?.email || "N")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(p => p[0].toUpperCase())
+    .join("");
+
+  const googleSetupModalEl = showGoogleSetupModal && (
+    <div className="modalBackdrop" onClick={() => !googleSetupSaving && setShowGoogleSetupModal(false)}>
+      <div className="modalBox authGoogleModal" onClick={e => e.stopPropagation()}>
+        <div className="modalHead" style={{ marginBottom: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <GoogleGIcon size={22} />
+            <div>
+              <h3 style={{ margin: 0, fontSize: "17px" }}>Connect Google Sign-In (OAuth 2.0)</h3>
+              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>
+                One-time setup using your Google Cloud OAuth 2.0 Web Client credentials
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="authModalCloseBtn"
+            onClick={() => setShowGoogleSetupModal(false)}
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="authRedirectBox">
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px", fontWeight: 600 }}>
+            Authorized Redirect URI (add in Google Cloud Console &rarr; Credentials)
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <code className="authRedirectCode">{authProviders.redirectUri}</code>
+            <button
+              type="button"
+              className="btn btnSecondary"
+              style={{ padding: "5px 10px", fontSize: "11px" }}
+              onClick={() => {
+                navigator.clipboard?.writeText(authProviders.redirectUri);
+                showToast("Redirect URI copied!", "info");
+              }}
+            >
+              <Copy size={12} /> Copy
+            </button>
+          </div>
+        </div>
+
+        <div className="formGroup" style={{ marginBottom: "12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <label style={{ fontSize: "12.5px", fontWeight: 600 }}>Google Client ID</label>
+            <a
+              href="https://console.cloud.google.com/apis/credentials"
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: "11px", color: "#38bdf8", textDecoration: "none" }}
+            >
+              Google Cloud Console &rarr;
+            </a>
+          </div>
+          <input
+            type="text"
+            placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+            value={googleClientIdInput}
+            onChange={e => setGoogleClientIdInput(e.target.value)}
+          />
+        </div>
+
+        <div className="formGroup" style={{ marginBottom: "18px" }}>
+          <label style={{ fontSize: "12.5px", fontWeight: 600 }}>Google Client Secret</label>
+          <input
+            type="password"
+            placeholder="GOCSPX-..."
+            value={googleClientSecretInput}
+            onChange={e => setGoogleClientSecretInput(e.target.value)}
+          />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+          <button
+            type="button"
+            className="btn btnSecondary"
+            onClick={() => setShowGoogleSetupModal(false)}
+            disabled={googleSetupSaving}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btnPrimary"
+            onClick={() => handleSaveGoogleConfig(!currentUser)}
+            disabled={googleSetupSaving || !googleClientIdInput.trim() || !googleClientSecretInput.trim()}
+          >
+            {googleSetupSaving ? (
+              <>
+                <RefreshCw size={14} className="spin" /> Saving...
+              </>
+            ) : currentUser ? (
+              <>
+                <Check size={14} /> Save Google OAuth
+              </>
+            ) : (
+              <>
+                <GoogleGIcon size={15} /> Save &amp; Continue with Google
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (authChecking) {
+    return (
+      <div className={`authPageShell ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
+        <div className="authCheckingCard">
+          <img src={navioLogo} alt="Navio" className="authLogoImg" />
+          <div className="geminiDotsWaveNoShadow" aria-label="Loading">
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className={`authPageShell ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
+        <div className="toastStack">
+          {toasts.map(t => (
+            <div key={t.id} className={`toastItem toast-${t.type}`}>
+              <span className="toastMsg">{t.message}</span>
+              <button className="toastClose" onClick={() => dismissToast(t.id)}>
+                <XCircle size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="authThemeToggle">
+          {renderThemeToggle(false)}
+        </div>
+
+        <div className="authCard">
+          <div className="authBrandWrap">
+            <img src={navioLogo} alt="Navio" className="authLogoImg" />
+            <h1 className="authTitle">{authMode === "login" ? "Welcome back" : "Create your account"}</h1>
+            <p className="authSubtitle">
+              Sign in with Google or your Gmail / Email account
+            </p>
+          </div>
+
+          <div className="authModeTabsWrap">
+            <div className={`authModeTabs ${authMode === "register" ? "isRegister" : ""}`} role="tablist">
+              <div
+                className="authModeGlider"
+                aria-hidden="true"
+                style={
+                  authGliderStyle.width > 0
+                    ? { width: `${authGliderStyle.width}px`, transform: `translateX(${authGliderStyle.left}px)` }
+                    : undefined
+                }
+              />
+              <button
+                ref={authLoginTabRef}
+                type="button"
+                role="tab"
+                aria-selected={authMode === "login"}
+                className={`authModeTab ${authMode === "login" ? "active" : ""}`}
+                onClick={() => { setAuthMode("login"); setAuthError(null); }}
+              >
+                Sign In
+              </button>
+              <button
+                ref={authRegisterTabRef}
+                type="button"
+                role="tab"
+                aria-selected={authMode === "register"}
+                className={`authModeTab ${authMode === "register" ? "active" : ""}`}
+                onClick={() => { setAuthMode("register"); setAuthError(null); }}
+              >
+                Create Account
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="authGoogleBtn"
+            onClick={handleContinueWithGoogle}
+            disabled={authSubmitting}
+          >
+            <GoogleGIcon size={18} />
+            <span>Continue with Google</span>
+          </button>
+
+          {!authProviders.googleConfigured && (
+            <div className="authGoogleHint">
+              First time using Google Sign-In?{" "}
+              <button
+                type="button"
+                className="authInlineLinkBtn"
+                onClick={() => setShowGoogleSetupModal(true)}
+              >
+                Add Google OAuth Client ID
+              </button>
+            </div>
+          )}
+
+          <div className="authDivider">
+            <span>or continue with email / Gmail</span>
+          </div>
+
+          {authError && (
+            <div className="authErrorAlert" role="alert">
+              <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleEmailAuthSubmit} className="authForm">
+            <div className={`authFullNameExpand ${authMode === "register" ? "open" : ""}`} aria-hidden={authMode !== "register"}>
+              <div className="authFullNameExpandInner">
+                <div className="authInputGroup">
+                  <label>Full Name</label>
+                  <div className="authInputWrap">
+                    <User size={16} className="authInputIcon" />
+                    <input
+                      type="text"
+                      placeholder="e.g. Saurabh Patel"
+                      value={authFullName}
+                      onChange={e => setAuthFullName(e.target.value)}
+                      autoComplete="name"
+                      required={authMode === "register"}
+                      disabled={authMode !== "register"}
+                      tabIndex={authMode === "register" ? 0 : -1}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="authInputGroup">
+              <label>Gmail / Email Address</label>
+              <div className="authInputWrap">
+                <Mail size={16} className="authInputIcon" />
+                <input
+                  type="email"
+                  placeholder="you@gmail.com"
+                  value={authEmail}
+                  onChange={e => setAuthEmail(e.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="authInputGroup">
+              <label>Password</label>
+              <div className="authInputWrap">
+                <Lock size={16} className="authInputIcon" />
+                <input
+                  type={showAuthPassword ? "text" : "password"}
+                  placeholder={authMode === "register" ? "Minimum 6 characters" : "Enter your password"}
+                  value={authPassword}
+                  onChange={e => setAuthPassword(e.target.value)}
+                  autoComplete={authMode === "register" ? "new-password" : "current-password"}
+                  minLength={6}
+                  required
+                  style={{ paddingRight: "42px" }}
+                />
+                <button
+                  type="button"
+                  className="authPasswordToggle"
+                  onClick={() => setShowAuthPassword(p => !p)}
+                  aria-label={showAuthPassword ? "Hide password" : "Show password"}
+                >
+                  {showAuthPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="authSubmitBtn"
+              disabled={authSubmitting}
+            >
+              {authSubmitting ? (
+                <>
+                  <RefreshCw size={16} className="spin" />{" "}
+                  {authMode === "login" ? "Signing in..." : "Creating account..."}
+                </>
+              ) : (
+                <span>{authMode === "login" ? "Sign In with Email" : "Create Account"}</span>
+              )}
+            </button>
+          </form>
+        </div>
+
+        {googleSetupModalEl}
+      </div>
+    );
+  }
 
   return (
     <div className={`shell ${theme === "dark" ? "darkTheme" : "lightTheme"}`}>
@@ -1318,9 +3249,15 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
         <a className={`nav ${activeTab === "social" ? "active" : ""}`} onClick={() => setActiveTab("social")}>
           <Share2 size={18} /> Social & WhatsApp
         </a>
+        <a className={`nav ${activeTab === "scheduler" ? "active" : ""}`} onClick={() => setActiveTab("scheduler")}>
+          <CalendarClock size={18} /> Scheduler
+          {scheduledJobs.filter(j => j.enabled).length > 0 && (
+            <span className="badge" style={{ color: "#34d399" }}>{scheduledJobs.filter(j => j.enabled).length}</span>
+          )}
+        </a>
         <a className={`nav ${activeTab === "approvals" ? "active" : ""}`} onClick={() => setActiveTab("approvals")}>
           <ShieldCheck size={18} /> Approval Center
-          {pendingApprovalsCount > 0 && <span className="badge" style={{ background: "#ef4444" }}>{pendingApprovalsCount}</span>}
+          {pendingApprovalsCount > 0 && <span className="badge" style={{ color: "#f87171" }}>{pendingApprovalsCount}</span>}
         </a>
         <a className={`nav ${activeTab === "files" ? "active" : ""}`} onClick={() => setActiveTab("files")}>
           <FileSpreadsheet size={18} /> Generated Files
@@ -1331,20 +3268,61 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
         <a className={`nav ${activeTab === "security" ? "active" : ""}`} onClick={() => setActiveTab("security")}>
           <Lock size={18} /> Security & Audit
         </a>
+        <a className={`nav ${activeTab === "personalization" ? "active" : ""}`} onClick={() => setActiveTab("personalization")}>
+          <User size={18} /> Personalization
+          {!personalProfile.enabled ? (
+            <span className="badge" style={{ color: "#94a3b8" }}>Off</span>
+          ) : (personalFiles.length > 0 || personalProfile.customText.trim() || personalProfile.fullName.trim() || personalProfile.email.trim()) ? (
+            <span className="badge" style={{ color: "#34d399" }}>
+              {personalFiles.length > 0 ? `${personalFiles.length} File${personalFiles.length > 1 ? "s" : ""}` : "Active"}
+            </span>
+          ) : (
+            <span className="badge">Empty</span>
+          )}
+        </a>
         <a className={`nav ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
           <Settings size={18} /> Settings & AI Keys
           {aiStatus.isConfigured ? (
-            <span className="badge" style={{ background: "#10b981", color: "#fff" }}>Active</span>
+            aiStatus.lastError ? (
+              <span className="badge" style={{ color: "#f87171" }} title={aiStatus.lastError}>Key Error</span>
+            ) : (
+              <span className="badge" style={{ color: "#34d399" }}>Active</span>
+            )
           ) : (
-            <span className="badge" style={{ background: "#f59e0b", color: "#0f172a" }}>Setup</span>
+            <span className="badge" style={{ color: "#fbbf24" }}>Setup</span>
           )}
         </a>
 
-        <div className="sideBottom">
-          <ShieldCheck size={20} style={{ color: "#38bdf8" }} />
-          <div>
-            <b>AES-256-GCM Vault</b>
-            <small>Active SSRF & Sandbox Defense</small>
+        <div className="sidebarBottomGroup">
+          <div className="sideBottom" style={{ marginTop: 0 }}>
+            <ShieldCheck size={20} style={{ color: "#38bdf8" }} />
+            <div>
+              <b>AES-256-GCM Vault</b>
+              <small>Active SSRF & Sandbox Defense</small>
+            </div>
+          </div>
+
+          <div className="sidebarUserCard">
+            <div className="sidebarUserLeft">
+              {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="sidebarUserAvatarImg" />
+              ) : (
+                <div className="sidebarUserAvatarFallback">{userInitials}</div>
+              )}
+              <div className="sidebarUserMeta">
+                <b title={currentUser.fullName}>{currentUser.fullName}</b>
+                <small title={currentUser.email}>{currentUser.email}</small>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="sidebarLogoutBtn"
+              onClick={handleLogout}
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </div>
       </aside>
@@ -1352,22 +3330,23 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
       {/* Main Content Area */}
       <main className={`content ${activeTab === "dashboard" ? "dashboardContent" : ""}`}>
         {activeTab !== "dashboard" && (
-          <header className="topBar">
-            <div>
-              <div className="eyebrow">NAVIO / ENTERPRISE AI BROWSER AGENT</div>
-              <h1>
+          <header className="unifiedTopBar">
+            <div className="unifiedTopBarLeft">
+              <h1 className="unifiedTopBarTitle">
                 {activeTab === "connections" && "Connected Platforms & Accounts"}
                 {activeTab === "capabilities" && "Dynamic Capability Discovery Matrix"}
                 {activeTab === "social" && "Social Media & WhatsApp Hub"}
+                {activeTab === "scheduler" && "Automation Scheduler — Daily & Recurring Tasks"}
                 {activeTab === "approvals" && "Risk-Based Approval Center"}
                 {activeTab === "files" && "Generated Files & Extracted Reports"}
                 {activeTab === "security" && "Security Vault & Audit Trail"}
+                {activeTab === "personalization" && "Personalization — Personal Text & Files"}
                 {activeTab === "settings" && "Settings & AI Engine Configuration"}
               </h1>
-              <p>Navio: One AI Agent. One Command Interface. Natural-Language Digital Execution.</p>
             </div>
             <div className="headerActions">
               {renderThemeToggle(false)}
+              {renderTopProfileMenu()}
             </div>
           </header>
         )}
@@ -1396,121 +3375,150 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
             {historyPanelOpen && (
               <aside className="geminiHistoryPanel">
                 <div className="geminiHistoryPanelTop">
-                  <button
-                    type="button"
-                    className="geminiNewChatPillBtn"
-                    onClick={() => {
-                      setConversationStarted(false);
-                      setChatMessages([]);
-                      setGeminiPrompt("");
-                      setSelectedTarget("");
-                      setShowPlusMenu(false);
-                      setActiveHistoryId(null);
-                    }}
-                  >
-                    <Plus size={16} /> New chat
-                  </button>
-                  <button
-                    type="button"
-                    className="geminiPanelToggleBtn"
-                    onClick={() => setHistoryPanelOpen(false)}
-                    title="Collapse history panel"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
+                  <div className="geminiHistoryTitleGroup">
+                    <HistoryDocClockIcon size={15} />
+                    <span>RECENT</span>
+                  </div>
+                  <div className="geminiHistoryHeaderActions">
+                    <button
+                      type="button"
+                      className="geminiPanelIconBtn"
+                      onClick={() => startNewConversation()}
+                      title="New chat"
+                    >
+                      <Plus size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      className="geminiPanelToggleBtn"
+                      onClick={() => setHistoryPanelOpen(false)}
+                      title="Collapse history panel"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="geminiHistoryLabel">
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <HistoryDocClockIcon size={14} />
-                    <span>Recent</span>
-                  </div>
-                  {tasks.length > 0 && (
+                <div className="geminiHistoryScrollArea">
+                  {conversations.length === 0 ? (
+                    <div className="geminiHistoryEmpty">No conversations yet</div>
+                  ) : (
+                    conversations.slice(0, 50).map(c => {
+                      const isEditing = editingConvId === c.id;
+                      return (
+                        <div
+                          key={c.id}
+                          className={`geminiHistoryItem ${activeHistoryId === c.id ? "active" : ""} ${isEditing ? "editing" : ""}`}
+                          onClick={() => {
+                            if (!isEditing) void openConversation(c.id);
+                          }}
+                          onDoubleClick={e => beginRenameConversation(c, e)}
+                          title={isEditing ? undefined : c.title}
+                        >
+                          <HistoryDocClockIcon size={15} className="geminiHistoryIcon" />
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              className="geminiHistoryEditInput"
+                              value={editingConvTitle}
+                              autoFocus
+                              maxLength={120}
+                              onFocus={e => e.currentTarget.select()}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => setEditingConvTitle(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  void commitRenameConversation(c.id);
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  editTitleCancelRef.current = true;
+                                  setEditingConvId(null);
+                                }
+                              }}
+                              onBlur={() => void commitRenameConversation(c.id)}
+                            />
+                          ) : (
+                            <>
+                              <span className="geminiHistoryText">{c.title}</span>
+                              <div className="geminiHistoryItemActions">
+                                <button
+                                  type="button"
+                                  className="geminiHistoryActionBtn"
+                                  onClick={e => beginRenameConversation(c, e)}
+                                  title="Rename conversation"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="geminiHistoryActionBtn danger"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setDeleteConfirmModal({
+                                      type: "single",
+                                      conversationId: c.id,
+                                      taskPrompt: c.title
+                                    });
+                                  }}
+                                  title="Delete conversation"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {conversations.length > 0 && (
+                  <div className="geminiHistoryPanelFooter">
                     <button
                       type="button"
                       className="geminiHistoryClearAllBtn"
                       onClick={() => setDeleteConfirmModal({ type: "all" })}
-                      title="Permanently delete all command history"
+                      title="Permanently delete all conversation history"
                     >
                       Clear all
                     </button>
-                  )}
-                </div>
-                <div className="geminiHistoryScrollArea">
-                  {tasks.length === 0 ? (
-                    <div className="geminiHistoryEmpty">No past commands yet</div>
-                  ) : (
-                    tasks.slice(0, 40).map(t => (
-                      <div
-                        key={t.id}
-                        className={`geminiHistoryItem ${activeHistoryId === t.id ? "active" : ""}`}
-                        onClick={() => {
-                          setActiveHistoryId(t.id);
-                          const targetConn = connections.find(c => c.id === t.connectionId);
-                          const matchingFile = files.find(f => f.taskId === t.id || f.fileName.includes(t.id));
-                          setChatMessages([
-                            {
-                              id: "hist-u-" + t.id,
-                              role: "user",
-                              targetName: targetConn?.name || "",
-                              prompt: t.prompt,
-                              status: "COMPLETED",
-                              createdAt: t.createdAt
-                            },
-                            {
-                              id: "hist-a-" + t.id,
-                              role: "assistant",
-                              targetName: targetConn?.name || "",
-                              content: t.result || "Execution completed.",
-                              status: t.status === "FAILED" ? "FAILED" : "COMPLETED",
-                              file: matchingFile,
-                              createdAt: t.createdAt
-                            }
-                          ]);
-                          setConversationStarted(true);
-                        }}
-                        title={t.prompt}
-                      >
-                        <HistoryDocClockIcon size={15} className="geminiHistoryIcon" />
-                        <span className="geminiHistoryText">{t.prompt}</span>
-                        <button
-                          type="button"
-                          className="geminiHistoryDeleteBtn"
-                          onClick={e => {
-                            e.stopPropagation();
-                            setDeleteConfirmModal({
-                              type: "single",
-                              taskId: t.id,
-                              taskPrompt: t.prompt
-                            });
-                          }}
-                          title="Permanently delete from database"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
+                  </div>
+                )}
               </aside>
             )}
 
             {/* Box 3 (Column 3): Main Canvas Area */}
             <div className="geminiMainCanvas">
-              {/* Prominent History Icon Button on Canvas (Visible when history panel is hidden) */}
-              {!historyPanelOpen && !conversationStarted && (
-                <button
-                  type="button"
-                  className="geminiHistoryOpenBtn"
-                  onClick={() => setHistoryPanelOpen(true)}
-                  title="Open Command History"
-                >
-                  <HistoryDocClockIcon size={20} />
-                </button>
-              )}
-
-              {/* Theme Toggle Button (Top-Right) */}
-              {renderThemeToggle(true)}
+              <header className="unifiedTopBar">
+                <div className="unifiedTopBarLeft">
+                  {!historyPanelOpen && (
+                    <button
+                      type="button"
+                      className="geminiTopBarIconBtn"
+                      onClick={() => setHistoryPanelOpen(true)}
+                      title="Open conversations"
+                    >
+                      <HistoryDocClockIcon size={17} />
+                    </button>
+                  )}
+                </div>
+                <div className="headerActions">
+                  {conversationStarted && (
+                    <button
+                      type="button"
+                      className="geminiTopBarIconBtn"
+                      onClick={() => startNewConversation()}
+                      title="New chat"
+                    >
+                      <Plus size={17} />
+                    </button>
+                  )}
+                  {renderThemeToggle(false)}
+                  {renderTopProfileMenu()}
+                </div>
+              </header>
 
               {!conversationStarted ? (
                 /* CENTER STAGE (Initial Homepage - Image 2) */
@@ -1523,38 +3531,6 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
               ) : (
                 /* CHAT ACTIVE STAGE (Bottom Docked Input Mode) */
                 <div className="geminiChatStage">
-                  {/* Chat Top Header */}
-                  <div className="geminiChatTopBar">
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      {!historyPanelOpen && (
-                        <button
-                          type="button"
-                          className="geminiTopBarIconBtn"
-                          onClick={() => setHistoryPanelOpen(true)}
-                          title="Open command history"
-                        >
-                          <HistoryDocClockIcon size={18} />
-                        </button>
-                      )}
-                      <div className="geminiChatIconOnly" title="AI Command Center">
-                        <Sparkles size={20} className="geminiSparkleIcon" />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="geminiTopBarIconBtn"
-                      onClick={() => {
-                        setConversationStarted(false);
-                        setGeminiPrompt("");
-                        setSelectedTarget("");
-                        setShowPlusMenu(false);
-                        setActiveHistoryId(null);
-                      }}
-                      title="New Command"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
 
                   {/* Conversation Stream */}
                   <div className="geminiChatFeed">
@@ -1575,7 +3551,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                             <div key={m.id} className="geminiAgentMessage">
                               <div className="geminiAgentBody">
                                 {m.status === "THINKING" ? (
-                                  <div className="geminiThinkingIndicator">
+                                  <div className="geminiThinkingIndicator" aria-label="Processing">
                                     <div className="geminiGeminiDots">
                                       <span className="geminiDot dot1" />
                                       <span className="geminiDot dot2" />
@@ -1588,25 +3564,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                                   </div>
                                 )}
 
-                            {m.file && (
-                              <div className="geminiGeneratedFileBadge">
-                                <div className="geminiFileLeft">
-                                  <FileSpreadsheet size={18} color="#10b981" />
-                                  <div>
-                                    <b>{m.file.fileName}</b>
-                                    <small style={{ display: "block" }}>{m.file.rowCount} records extracted</small>
-                                  </div>
-                                </div>
-                                <a
-                                  href={`${API}/files/${m.file.id}/download`}
-                                  className="btn btnSecondary"
-                                  style={{ height: "28px", padding: "0 10px", fontSize: "11px", gap: "4px" }}
-                                  download
-                                >
-                                  <Download size={13} /> Download CSV
-                                </a>
-                              </div>
-                            )}
+                            {renderScrapedArtifacts(m.scrapedItems, m.file)}
 
                             {m.actions && m.actions.length > 0 && (
                               <details className="geminiTraceAccordion">
@@ -1656,25 +3614,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                                 <FormattedMarkdown content={t.result || "Execution recorded. Observe-Plan-Act-Verify cycle processed for destination."} />
                               </div>
 
-                              {matchingFile && (
-                                <div className="geminiGeneratedFileBadge">
-                                  <div className="geminiFileLeft">
-                                    <FileSpreadsheet size={18} color="#10b981" />
-                                    <div>
-                                      <b>{matchingFile.fileName}</b>
-                                      <small style={{ display: "block" }}>{matchingFile.rowCount} records extracted</small>
-                                    </div>
-                                  </div>
-                                  <a
-                                    href={`${API}/files/${matchingFile.id}/download`}
-                                    className="btn btnSecondary"
-                                    style={{ height: "28px", padding: "0 10px", fontSize: "11px", gap: "4px" }}
-                                    download
-                                  >
-                                    <Download size={13} /> Download CSV
-                                  </a>
-                                </div>
-                              )}
+                              {renderScrapedArtifacts(parseScrapedItems(t.extractedItems), matchingFile)}
 
                               <div className="geminiActionRow" style={{ marginTop: "4px" }}>
                                 <button
@@ -1730,6 +3670,63 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 </div>
               </div>
             )}
+
+              {/* Quick Connect Website Modal */}
+              {showQuickAddModal && (
+                <div className="modalOverlay" onClick={() => setShowQuickAddModal(false)}>
+                  <div className="modalBox" onClick={e => e.stopPropagation()}>
+                    <div className="modalHead">
+                      <div>
+                        <h3>Connect Website or Web App</h3>
+                        <p>Register any authorized custom portal, CRM, or SaaS dashboard.</p>
+                      </div>
+                      <button
+                        type="button"
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+                        onClick={() => setShowQuickAddModal(false)}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleQuickAddConnection} className="formGroup">
+                      <label>
+                        Connection Name
+                        <input
+                          value={quickConnName}
+                          onChange={e => setQuickConnName(e.target.value)}
+                          placeholder="e.g. Canva Workspace, Shopify Admin, Acme ERP"
+                          required
+                          maxLength={160}
+                          autoFocus
+                        />
+                      </label>
+                      <label>
+                        Website / Portal URL
+                        <input
+                          type="url"
+                          value={quickConnUrl}
+                          onChange={e => setQuickConnUrl(e.target.value)}
+                          placeholder="https://example.com"
+                          required
+                        />
+                      </label>
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
+                        <button
+                          type="button"
+                          className="btn btnSecondary"
+                          onClick={() => setShowQuickAddModal(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button type="submit" className="btn btnPrimary" disabled={busy}>
+                          {busy ? "Connecting..." : "Connect & Target"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div> {/* End geminiMainCanvas */}
 
             {/* In-App Confirmation Popup Modal (Zero Native Alerts) */}
@@ -1763,12 +3760,12 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                     </div>
                     <div>
                       <h3 style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: "600", color: theme === "dark" ? "#f8fafc" : "#0f172a" }}>
-                        {deleteConfirmModal.type === "all" ? "Clear all command history?" : "Delete command?"}
+                        {deleteConfirmModal.type === "all" ? "Clear all chat history?" : "Delete conversation?"}
                       </h3>
                       <p style={{ margin: 0, fontSize: "13px", lineHeight: "1.5", color: theme === "dark" ? "#94a3b8" : "#64748b" }}>
                         {deleteConfirmModal.type === "all"
-                          ? "This will permanently remove all past session records from the database. This action cannot be undone."
-                          : `Are you sure you want to permanently delete "${deleteConfirmModal.taskPrompt || "this command"}"? This action cannot be undone.`}
+                          ? "This will permanently remove all saved conversations and their message history. This action cannot be undone."
+                          : `Are you sure you want to permanently delete "${deleteConfirmModal.taskPrompt || "this conversation"}"? This action cannot be undone.`}
                       </p>
                     </div>
                   </div>
@@ -1789,7 +3786,9 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                         const modal = deleteConfirmModal;
                         setDeleteConfirmModal(null);
                         if (modal.type === "all") {
-                          await executeClearAllTasks();
+                          await executeClearAllConversations();
+                        } else if (modal.conversationId) {
+                          await handleDeleteConversation(modal.conversationId);
                         } else if (modal.taskId) {
                           await handleDeleteTask(modal.taskId);
                         }
@@ -1812,65 +3811,12 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
               </div>
             )}
 
-            {/* Quick Connect Website Modal */}
-            {showQuickAddModal && (
-              <div className="modalOverlay" onClick={() => setShowQuickAddModal(false)}>
-                <div className="modalBox" onClick={e => e.stopPropagation()}>
-                  <div className="modalHead">
-                    <div>
-                      <h3>Connect Website or Web App</h3>
-                      <p>Register any authorized custom portal, CRM, or SaaS dashboard.</p>
-                    </div>
-                    <button
-                      type="button"
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
-                      onClick={() => setShowQuickAddModal(false)}
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleQuickAddConnection} className="formGroup">
-                    <label>
-                      Connection Name
-                      <input
-                        value={quickConnName}
-                        onChange={e => setQuickConnName(e.target.value)}
-                        placeholder="e.g. Canva Workspace, Shopify Admin, Acme ERP"
-                        required
-                        maxLength={160}
-                        autoFocus
-                      />
-                    </label>
-                    <label>
-                      Website / Portal URL
-                      <input
-                        type="url"
-                        value={quickConnUrl}
-                        onChange={e => setQuickConnUrl(e.target.value)}
-                        placeholder="https://example.com"
-                        required
-                      />
-                    </label>
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
-                      <button
-                        type="button"
-                        className="btn btnSecondary"
-                        onClick={() => setShowQuickAddModal(false)}
-                      >
-                        Cancel
-                      </button>
-                      <button type="submit" className="btn btnPrimary" disabled={busy}>
-                        {busy ? "Connecting..." : "Connect & Target"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
+        {activeTab !== "dashboard" && (
+          <div className="pageBodyScroll">
+            <div className="pageBodyInner">
         {/* TAB 2: CONNECTED PLATFORMS */}
         {activeTab === "connections" && (
           <>
@@ -1969,7 +3915,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                           style={{ cursor: "pointer" }}
                         />
                       </td>
-                      <td><b>{c.name}</b><small style={{ display: "block", color: "#64748b" }}>{c.websiteUrl}</small></td>
+                      <td><div style={{ display: "flex", alignItems: "center", gap: "10px" }}><ConnectorLogo name={c.name} websiteUrl={c.websiteUrl} size={22} /><div><b>{c.name}</b><small style={{ display: "block", color: "#64748b" }}>{c.websiteUrl}</small></div></div></td>
                       <td>Custom Website</td>
                       <td>Session / AES-256 Vault</td>
                       <td>Verified HTTP/HTTPS</td>
@@ -2018,6 +3964,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
             {connectors.map(con => (
               <div key={con.id} style={{ marginBottom: "24px" }}>
                 <h3 style={{ fontSize: "15px", margin: "0 0 10px", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <ConnectorLogo name={con.name} connectorId={con.id} size={20} />
                   <span>{con.name}</span>
                   <span className="tag tagBlue">{con.category}</span>
                 </h3>
@@ -2160,6 +4107,304 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
           </div>
         )}
 
+        {/* TAB: UNIVERSAL AUTOMATION SCHEDULER */}
+        {activeTab === "scheduler" && (
+          <>
+            <div className="settingsGridTwo" style={{ marginBottom: "20px" }}>
+              <form className="panel" onSubmit={handleCreateSchedule} style={{ margin: 0 }}>
+                <div className="panelHead" style={{ borderBottom: "1px solid rgba(59, 130, 246, 0.14)", paddingBottom: "14px", marginBottom: "16px" }}>
+                  <div>
+                    <h2 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <CalendarClock size={18} style={{ color: "#38bdf8" }} /> Create Scheduled Automation
+                    </h2>
+                    <p>Schedule any browser task, website scraping, job search &amp; auto-apply, or daily AI prompt on a recurring timer.</p>
+                  </div>
+                </div>
+
+                <div className="formGroup">
+                  <label>
+                    Schedule Name
+                    <input
+                      type="text"
+                      placeholder="e.g. Daily Canva Export / Check Site Prices / Naukri Jobs"
+                      value={schedName}
+                      onChange={e => setSchedName(e.target.value)}
+                    />
+                  </label>
+
+                  <div className="personalFieldsRow">
+                    <label>
+                      Workflow Mode
+                      <select
+                        value={schedTaskMode}
+                        onChange={e => {
+                          const mode = e.target.value as "AUTO" | "BROWSER_TASK" | "JOB_AUTOMATION" | "AI_CHAT";
+                          setSchedTaskMode(mode);
+                          if (mode === "JOB_AUTOMATION") setSchedAutoApply(true);
+                          else if (mode === "BROWSER_TASK" || mode === "AI_CHAT") setSchedAutoApply(false);
+                        }}
+                      >
+                        <option value="AUTO">Auto-Detect (Any Task or Jobs)</option>
+                        <option value="BROWSER_TASK">Website Automation / Scraping (Any Site)</option>
+                        <option value="JOB_AUTOMATION">Job Portal Scrape &amp; Auto-Apply</option>
+                        <option value="AI_CHAT">AI Prompt / Report (No Browser)</option>
+                      </select>
+                    </label>
+
+                    {schedTaskMode !== "AI_CHAT" && (
+                      <label>
+                        Target Connected Website / Portal
+                        <select value={schedConnId} onChange={e => setSchedConnId(e.target.value)}>
+                          <option value="">General AI Task (No Website)</option>
+                          {connections.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.status})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="personalFieldsRow">
+                    <label>
+                      Cadence
+                      <select value={schedCadence} onChange={e => setSchedCadence(e.target.value as "DAILY" | "WEEKDAYS" | "HOURLY")}>
+                        <option value="DAILY">Every Day (Daily)</option>
+                        <option value="WEEKDAYS">Weekdays (Mon - Fri)</option>
+                        <option value="HOURLY">Every Hour (Hourly)</option>
+                      </select>
+                    </label>
+                    <label>
+                      {schedCadence === "HOURLY" ? "Minute Offset (HH:mm)" : "Scheduled Run Time"}
+                      <input
+                        type="time"
+                        value={schedTime}
+                        onChange={e => setSchedTime(e.target.value)}
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <label>
+                    Timezone
+                    <select value={schedTimezone} onChange={e => setSchedTimezone(e.target.value)}>
+                      <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                      <option value="UTC">UTC</option>
+                      <option value="America/New_York">America/New_York</option>
+                      <option value="Europe/London">Europe/London</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Task Instructions / Requirements / Prompt
+                    <textarea
+                      rows={3}
+                      placeholder="Examples:&#10;• Find all new banner templates and export links to CSV&#10;• Scrape Java Spring Boot jobs matching my resume in Pune and apply&#10;• Summarize top AI trends and action items"
+                      value={schedRequirements}
+                      onChange={e => setSchedRequirements(e.target.value)}
+                      required
+                    />
+                  </label>
+
+                  {(schedTaskMode === "JOB_AUTOMATION" ||
+                    (schedTaskMode === "AUTO" && /(job|jobs|naukri|linkedin|indeed|internshala|foundit|apply)/i.test(schedRequirements + " " + (connections.find(c => c.id === schedConnId)?.name || "")))) && (
+                    <>
+                      <div className="personalFieldsRow">
+                        <label>
+                          Preferred Location (Jobs)
+                          <input
+                            type="text"
+                            placeholder="e.g. Pune, Bangalore, Remote"
+                            value={schedLocation}
+                            onChange={e => setSchedLocation(e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          Max Applications / Run
+                          <input
+                            type="number"
+                            min={1}
+                            max={25}
+                            value={schedMaxApply}
+                            onChange={e => setSchedMaxApply(Math.max(1, Math.min(25, Number(e.target.value) || 5)))}
+                          />
+                        </label>
+                      </div>
+
+                      <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontWeight: 500 }}>
+                        <input
+                          type="checkbox"
+                          checked={schedAutoApply}
+                          onChange={e => setSchedAutoApply(e.target.checked)}
+                        />
+                        <span>Auto-apply to matched jobs using saved Personalization &amp; Resume</span>
+                      </label>
+                    </>
+                  )}
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", paddingTop: "4px", flexWrap: "wrap" }}>
+                    <small style={{ color: "#94a3b8" }}>
+                      Works for any connected site or general AI task.
+                    </small>
+                    <button className="btn btnPrimary" type="submit" disabled={schedSaving}>
+                      <Plus size={16} /> {schedSaving ? "Saving..." : "Save Schedule"}
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              <div className="panel" style={{ margin: 0 }}>
+                <div className="panelHead" style={{ borderBottom: "1px solid rgba(59, 130, 246, 0.14)", paddingBottom: "14px", marginBottom: "16px" }}>
+                  <div>
+                    <h2>Active Schedules ({scheduledJobs.length})</h2>
+                    <p>Runs automatically on schedule, or click Run Now to test any automation immediately.</p>
+                  </div>
+                </div>
+
+                {scheduledJobs.length === 0 ? (
+                  <div style={{ color: "#94a3b8", fontSize: "13px", padding: "24px 0" }}>
+                    No schedules yet. Create one on the left (or type in Command Center: <code>@canva daily at 10:00 export all designs</code>).
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    {scheduledJobs.map(job => (
+                      <div
+                        key={job.id}
+                        style={{
+                          border: "1px solid rgba(148, 163, 184, 0.2)",
+                          borderRadius: "12px",
+                          padding: "14px 16px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px"
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <div>
+                            <b style={{ fontSize: "14px" }}>{job.name}</b>
+                            <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>
+                              {job.connectionName} &bull; {job.cadence || "DAILY"} at <b>{job.scheduleTime}</b> ({job.timezone})
+                              {job.preferredLocation ? ` • ${job.preferredLocation}` : ""}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                            <span className={`tag ${job.enabled ? "tagGreen" : "tagAmber"}`}>
+                              {job.enabled ? "ACTIVE" : "PAUSED"}
+                            </span>
+                            <span className="tag tagBlue">
+                              {job.taskMode === "JOB_AUTOMATION" || job.autoApply
+                                ? (job.autoApply ? `Jobs + Apply (≤${job.maxApplyPerRun})` : "Job Scrape")
+                                : job.taskMode === "AI_CHAT"
+                                  ? "AI Prompt"
+                                  : job.taskMode === "BROWSER_TASK"
+                                    ? "Web Task"
+                                    : "Auto"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: "12px", opacity: 0.9 }}>{job.requirements}</div>
+
+                        {job.lastSummary && (
+                          <div style={{ fontSize: "12px", color: job.lastStatus === "FAILED" ? "#f87171" : "#34d399" }}>
+                            Last Run ({job.lastStatus}): {job.lastSummary}
+                          </div>
+                        )}
+
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap", paddingTop: "4px" }}>
+                          <small style={{ color: "#94a3b8" }}>
+                            {job.lastRunAt ? `Last run: ${new Date(job.lastRunAt).toLocaleString()}` : "Waiting for next scheduled run"}
+                          </small>
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                              type="button"
+                              className="btn btnPrimary"
+                              style={{ height: "32px", padding: "0 12px", fontSize: "12px" }}
+                              disabled={runningSchedId === job.id}
+                              onClick={() => handleRunScheduleNow(job.id)}
+                            >
+                              <Play size={13} /> {runningSchedId === job.id ? "Running..." : "Run Now"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btnSecondary"
+                              style={{ height: "32px", padding: "0 12px", fontSize: "12px" }}
+                              onClick={() => handleToggleSchedule(job.id)}
+                            >
+                              <Pause size={13} /> {job.enabled ? "Pause" : "Resume"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btnDanger"
+                              style={{ height: "32px", padding: "0 10px", fontSize: "12px" }}
+                              onClick={() => handleDeleteSchedule(job.id)}
+                              title="Delete schedule"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panelHead">
+                <div>
+                  <h2>Scheduled Execution History</h2>
+                  <p>Browser tasks &amp; scraped reports automatically export CSVs to Generated Files.</p>
+                </div>
+                <button type="button" className="btn btnSecondary" style={{ height: "34px", fontSize: "12px" }} onClick={() => setActiveTab("files")}>
+                  <FileSpreadsheet size={15} /> Open CSV Reports
+                </button>
+              </div>
+
+              {scheduledRuns.length === 0 ? (
+                <div style={{ color: "#94a3b8", fontSize: "13px", padding: "12px 0" }}>
+                  No scheduled runs executed yet. Click <b>Run Now</b> on any schedule to test immediately.
+                </div>
+              ) : (
+                <div className="tableWrap">
+                  <table className="dataTable">
+                    <thead>
+                      <tr>
+                        <th>Started</th>
+                        <th>Schedule</th>
+                        <th>Target</th>
+                        <th>Status</th>
+                        <th>Extracted / Matched</th>
+                        <th>Actions / Applied</th>
+                        <th>Result Summary</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scheduledRuns.map(run => (
+                        <tr key={run.id}>
+                          <td style={{ whiteSpace: "nowrap", fontSize: "12px" }}>{new Date(run.startedAt).toLocaleString()}</td>
+                          <td><b>{run.scheduleName || "Schedule"}</b></td>
+                          <td>{run.connectionName || "General AI"}</td>
+                          <td>
+                            <span className={`tag ${run.status === "COMPLETED" ? "tagGreen" : run.status === "FAILED" ? "tagRed" : "tagAmber"}`}>
+                              {run.status}
+                            </span>
+                          </td>
+                          <td><b>{run.matchedCount}</b></td>
+                          <td><b>{run.appliedCount}</b></td>
+                          <td style={{ fontSize: "12px", maxWidth: "420px" }}>{run.summary || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {/* TAB 5: APPROVAL CENTER */}
         {activeTab === "approvals" && (
           <div className="panel">
@@ -2285,7 +4530,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                       <td>
                         <div className="actionBtnGroup" style={{ justifyContent: "center" }}>
                           <a
-                            href={`${API}/files/${f.id}/download`}
+                            href={`${API}/files/${f.id}/download${authToken ? `?token=${encodeURIComponent(authToken)}` : ""}`}
                             className="actionIconBtn primary"
                             title="Download Report File"
                             download
@@ -2345,9 +4590,289 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
           </div>
         )}
 
+        {/* TAB: PERSONALIZATION (ENTER TEXT + UPLOAD FILES) */}
+        {activeTab === "personalization" && (
+          <div>
+            <div className="panel personalizationBanner">
+              <div>
+                <h2 style={{ fontSize: "17px", margin: "0 0 4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <User size={19} color="#38bdf8" />
+                  Personalization Data &amp; Context
+                </h2>
+                <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>
+                  Add personal details by entering text or uploading files (resume, CV, PDF, DOCX, TXT). When a task or chat needs personal data, Navio uses this automatically.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={personalProfile.enabled}
+                aria-label={personalProfile.enabled ? "Disable personalization" : "Enable personalization"}
+                title={personalProfile.enabled ? "Personalization Enabled (click to disable)" : "Personalization Disabled (click to enable)"}
+                className={`personalSwitchControl ${personalProfile.enabled ? "enabled" : ""}`}
+                onClick={() => {
+                  const next = !personalProfile.enabled;
+                  setPersonalProfile(prev => ({ ...prev, enabled: next }));
+                  void handleSavePersonalization(next);
+                }}
+                disabled={savingPersonalization}
+              >
+
+                <span className="personalSwitchTrack">
+                  <span className="personalSwitchThumb" />
+                </span>
+              </button>
+            </div>
+
+            <div className="personalizationGrid">
+              {/* Card 1: Enter Text / Write Here */}
+              <div className="panel">
+                <div className="panelHead" style={{ borderBottom: "1px solid rgba(59, 130, 246, 0.14)", paddingBottom: "14px", marginBottom: "16px" }}>
+                  <div>
+                    <h2>Enter Text / Write Here</h2>
+                    <p>Type profile details, bio, preferences, or custom Key: Value fields for form filling and AI answers.</p>
+                  </div>
+                </div>
+
+                <div className="formGroup">
+                  <div className="personalFieldsRow">
+                    <div>
+                      <label>Full Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Saurabh Patel"
+                        value={personalProfile.fullName}
+                        onChange={e => setPersonalProfile(prev => ({ ...prev, fullName: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label>Email</label>
+                      <input
+                        type="email"
+                        placeholder="e.g. name@example.com"
+                        value={personalProfile.email}
+                        onChange={e => setPersonalProfile(prev => ({ ...prev, email: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label>Phone</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. +91 9876543210"
+                        value={personalProfile.phone}
+                        onChange={e => setPersonalProfile(prev => ({ ...prev, phone: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label>Location / Address</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Bengaluru, India"
+                        value={personalProfile.location}
+                        onChange={e => setPersonalProfile(prev => ({ ...prev, location: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label>Write Personal Data / Notes Here</label>
+                    <textarea
+                      rows={9}
+                      style={{ minHeight: "190px", lineHeight: 1.5 }}
+                      placeholder={"Write anything Navio should know when personal data is needed:\n• About me / Bio / Career Summary\n• Skills: React, TypeScript, Java, Spring Boot\n• LinkedIn: https://linkedin.com/in/username\n• GitHub: https://github.com/username\n• Preferred job role, notice period, writing style, etc."}
+                      value={personalProfile.customText}
+                      onChange={e => setPersonalProfile(prev => ({ ...prev, customText: e.target.value }))}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "4px" }}>
+                    <small style={{ color: "#94a3b8", fontSize: "11px" }}>
+                      {personalProfile.customText.length} characters saved
+                    </small>
+                    <button
+                      type="button"
+                      className="btn btnPrimary"
+                      onClick={() => handleSavePersonalization()}
+                      disabled={savingPersonalization}
+                    >
+                      {savingPersonalization ? (
+                        <><RefreshCw size={14} className="spin" /> Saving...</>
+                      ) : (
+                        <><Check size={14} /> Save Personal Details</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Upload Personal Files */}
+              <div className="panel">
+                <div className="panelHead" style={{ borderBottom: "1px solid rgba(59, 130, 246, 0.14)", paddingBottom: "14px", marginBottom: "16px" }}>
+                  <div>
+                    <h2>Upload Files</h2>
+                    <p>Upload resumes, PDFs, Word docs (.docx), TXT, CSV, JSON, or images for form uploads &amp; context.</p>
+                  </div>
+                  {personalFiles.length > 0 && (
+                    <span className="personalFileCountBadge">{personalFiles.length}</span>
+                  )}
+                </div>
+
+                <input
+                  ref={personalFileInputRef}
+                  type="file"
+                  multiple
+                  style={{ display: "none" }}
+                  accept=".pdf,.docx,.doc,.txt,.md,.csv,.json,.xml,.xlsx,.pptx,.png,.jpg,.jpeg,.webp"
+                  onChange={e => void handleUploadPersonalFiles(e.target.files)}
+                />
+
+                <div
+                  className={`personalDropZone ${personalDragActive ? "active" : ""}`}
+                  onClick={() => personalFileInputRef.current?.click()}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    setPersonalDragActive(true);
+                  }}
+                  onDragLeave={() => setPersonalDragActive(false)}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setPersonalDragActive(false);
+                    void handleUploadPersonalFiles(e.dataTransfer.files);
+                  }}
+                >
+                  <Upload size={26} color="#38bdf8" />
+                  <b style={{ fontSize: "14px" }}>
+                    {uploadingPersonalFiles ? "Uploading & indexing file..." : "Click to upload or drag & drop files here"}
+                  </b>
+                  <small style={{ color: "#94a3b8", fontSize: "12px" }}>
+                    Supports PDF, DOCX, TXT, MD, CSV, JSON, Images (up to 20 MB)
+                  </small>
+                </div>
+
+                <div className="personalFilesList">
+                  {personalFiles.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "18px 8px", color: "#94a3b8", fontSize: "12px" }}>
+                      No personal files uploaded yet.
+                    </div>
+                  ) : (
+                    personalFiles.map(pf => {
+                      const hasText = Boolean(pf.extractedText && pf.extractedText.trim().length > 0);
+                      const isExpanded = expandedPersonalFileId === pf.id;
+                      return (
+                        <div className="personalFileCard" key={pf.id}>
+                          <div className="personalFileTop">
+                            <div className="personalFileMeta">
+                              <FileText size={18} color="#38bdf8" style={{ flexShrink: 0 }} />
+                              <div className="personalFileNameWrap">
+                                <b title={pf.fileName}>{pf.fileName}</b>
+                                <small>
+                                  {formatFileSize(pf.fileSize)} • {hasText ? `${pf.extractedText!.length} chars indexed for AI` : "Ready for page file upload"}
+                                </small>
+                              </div>
+                            </div>
+                            <div className="personalFileActions">
+                              {hasText && (
+                                <button
+                                  type="button"
+                                  className={`personalCleanIconBtn ${isExpanded ? "active" : ""}`}
+                                  title={isExpanded ? "Hide extracted text" : "Preview extracted text"}
+                                  aria-label={isExpanded ? "Hide extracted text" : "Preview extracted text"}
+                                  onClick={() => setExpandedPersonalFileId(isExpanded ? null : pf.id)}
+                                >
+                                  {isExpanded ? <EyeOff size={17} strokeWidth={1.75} /> : <Eye size={17} strokeWidth={1.75} />}
+                                </button>
+                              )}
+                              <a
+                                href={`${API}/personalization/files/${pf.id}/download${authToken ? `?token=${encodeURIComponent(authToken)}` : ""}`}
+                                className="personalCleanIconBtn"
+                                title={`Download ${pf.fileName}`}
+                                aria-label={`Download ${pf.fileName}`}
+                                download
+                              >
+                                <ArrowDownToLine size={17} strokeWidth={1.75} />
+                              </a>
+                              <button
+                                type="button"
+                                className="personalCleanIconBtn danger"
+                                title="Delete personal file"
+                                aria-label={`Delete ${pf.fileName}`}
+                                onClick={() => void handleDeletePersonalFile(pf.id)}
+                              >
+                                <Trash2 size={17} strokeWidth={1.75} />
+                              </button>
+                            </div>
+                          </div>
+                          {isExpanded && hasText && (
+                            <div className="personalFileExtractPreview">
+                              {pf.extractedText!.slice(0, 1500)}
+                              {pf.extractedText!.length > 1500 ? "..." : ""}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB 8: SETTINGS & AI KEYS (CLEAN & SIMPLE) */}
         {activeTab === "settings" && (
-          <div className="panel" style={{ maxWidth: "640px", margin: "10px auto 0" }}>
+          <div className="settingsGridTwo">
+            <div className="panel" style={{ margin: 0 }}>
+              <div className="panelHead" style={{ borderBottom: "1px solid rgba(59, 130, 246, 0.15)", paddingBottom: "14px", marginBottom: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {currentUser.avatarUrl ? (
+                    <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="sidebarUserAvatarImg" style={{ width: "40px", height: "40px" }} />
+                  ) : (
+                    <div className="sidebarUserAvatarFallback" style={{ width: "40px", height: "40px", fontSize: "14px" }}>{userInitials}</div>
+                  )}
+                  <div>
+                    <h2 style={{ fontSize: "16px", margin: "0 0 2px" }}>{currentUser.fullName}</h2>
+                    <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>{currentUser.email}</p>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className="tag tagBlue" style={{ fontSize: "11px" }}>
+                    {currentUser.authProvider.includes("google") ? "Google Linked" : "Email / Gmail"}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btnSecondary"
+                    onClick={handleLogout}
+                    style={{ padding: "6px 12px", fontSize: "12px", color: "#ef4444" }}
+                  >
+                    <LogOut size={13} /> Sign Out
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <GoogleGIcon size={18} />
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: 600 }}>Google OAuth 2.0 Sign-In</div>
+                    <div style={{ fontSize: "11.5px", color: "#94a3b8" }}>
+                      {authProviders.googleConfigured
+                        ? `Configured (${authProviders.googleClientIdMasked || "Client ID active"})`
+                        : "Not configured yet — add Google Client ID & Secret to enable one-click Google login."}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btnSecondary"
+                  style={{ padding: "7px 12px", fontSize: "12px" }}
+                  onClick={() => setShowGoogleSetupModal(true)}
+                >
+                  {authProviders.googleConfigured ? "Update Google OAuth" : "Configure Google OAuth"}
+                </button>
+              </div>
+            </div>
+
+            <div className="panel" style={{ margin: 0 }}>
             <div className="panelHead" style={{ borderBottom: "1px solid rgba(59, 130, 246, 0.15)", paddingBottom: "16px", marginBottom: "20px" }}>
               <div>
                 <h2 style={{ fontSize: "18px", margin: "0 0 4px", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -2359,9 +4884,15 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 </p>
               </div>
               {aiStatus.isConfigured ? (
-                <span className="tag tagGreen" style={{ fontSize: "11px" }}>
-                  Active ({aiProvider.toUpperCase()})
-                </span>
+                aiStatus.lastError ? (
+                  <span className="tag tagRed" style={{ fontSize: "11px" }} title={aiStatus.lastError}>
+                    {aiStatus.lastError}
+                  </span>
+                ) : (
+                  <span className="tag tagGreen" style={{ fontSize: "11px" }}>
+                    Active ({aiProvider.toUpperCase()})
+                  </span>
+                )
               ) : (
                 <span className="tag tagAmber" style={{ fontSize: "11px" }}>
                   Not Configured
@@ -2381,14 +4912,14 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                     if (p === "gemini") setAiModel("gemini-1.5-flash");
                     else if (p === "openai") setAiModel("gpt-4o-mini");
                     else if (p === "claude") setAiModel("claude-3-5-sonnet-20241022");
-                    else if (p === "groq") setAiModel("llama-3.3-70b-versatile");
+                    else if (p === "groq") setAiModel("openai/gpt-oss-120b");
                   }}
                   style={{ height: "42px", fontSize: "14px" }}
                 >
                   <option value="gemini">Google Gemini (Recommended)</option>
                   <option value="openai">OpenAI (GPT-4o / GPT-4o-mini)</option>
                   <option value="claude">Claude (Anthropic)</option>
-                  <option value="groq">Groq (Ultra-fast Llama 3.3)</option>
+                  <option value="groq">Groq (Ultra-fast GPT-OSS / Qwen)</option>
                 </select>
               </div>
 
@@ -2397,7 +4928,7 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
                 <label style={{ fontSize: "13px", fontWeight: 600 }}>Model Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. gemini-1.5-flash, gpt-4o-mini, claude-3-5-sonnet, llama-3.3-70b"
+                  placeholder="e.g. gemini-1.5-flash, gpt-4o-mini, claude-3-5-sonnet, openai/gpt-oss-120b"
                   value={aiModel}
                   onChange={e => setAiModel(e.target.value)}
                   style={{ height: "42px", fontSize: "14px" }}
@@ -2490,7 +5021,12 @@ You can type \`@<name> ${rawPrompt}\` or type \`@all ${rawPrompt}\` to broadcast
               </div>
             </div>
           </div>
+          </div>
         )}
+            </div>
+          </div>
+        )}
+        {googleSetupModalEl}
 
         {/* User-Assisted UI Login Modal (Section 3.2) */}
         {loginModalConn && (

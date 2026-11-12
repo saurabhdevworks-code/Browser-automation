@@ -1,9 +1,12 @@
 package com.example.agent.file;
 
+import com.example.agent.auth.AuthInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -17,20 +20,28 @@ public class FileController {
     }
 
     @GetMapping
-    public List<GeneratedFile> list() {
-        return repository.findByOrderByCreatedAtDesc();
+    public List<GeneratedFile> list(HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        return repository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable UUID id) {
-        repository.deleteById(id);
+    public ResponseEntity<?> delete(@PathVariable UUID id, HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        var file = repository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new NoSuchElementException("File not found"));
+        repository.delete(file);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/batch-delete")
-    public ResponseEntity<?> batchDelete(@RequestBody List<UUID> ids) {
+    public ResponseEntity<?> batchDelete(@RequestBody List<UUID> ids, HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
         if (ids != null && !ids.isEmpty()) {
-            repository.deleteAllById(ids);
+            List<GeneratedFile> owned = repository.findByIdInAndUserId(ids, userId);
+            if (!owned.isEmpty()) {
+                repository.deleteAll(owned);
+            }
         }
         return ResponseEntity.noContent().build();
     }
@@ -38,7 +49,8 @@ public class FileController {
     public record CreateExportRequest(UUID taskId, String fileName, String fileType, List<Map<String, Object>> rows) {}
 
     @PostMapping("/export")
-    public ResponseEntity<GeneratedFile> createExport(@RequestBody CreateExportRequest req) {
+    public ResponseEntity<GeneratedFile> createExport(@RequestBody CreateExportRequest req, HttpServletRequest httpReq) {
+        UUID userId = AuthInterceptor.requireUserId(httpReq);
         StringBuilder csv = new StringBuilder();
         if (req.rows() != null && !req.rows().isEmpty()) {
             Set<String> headers = req.rows().getFirst().keySet();
@@ -58,6 +70,7 @@ public class FileController {
 
         String preview = csv.length() > 500 ? csv.substring(0, 500) + "..." : csv.toString();
         GeneratedFile file = new GeneratedFile(
+                userId,
                 req.taskId(),
                 req.fileName() != null ? req.fileName() : "export-" + System.currentTimeMillis() + ".csv",
                 req.fileType() != null ? req.fileType() : "CSV",
@@ -69,8 +82,10 @@ public class FileController {
     }
 
     @GetMapping("/{id}/download")
-    public ResponseEntity<byte[]> download(@PathVariable UUID id) {
-        var file = repository.findById(id).orElseThrow(() -> new NoSuchElementException("File not found"));
+    public ResponseEntity<byte[]> download(@PathVariable UUID id, HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        var file = repository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new NoSuchElementException("File not found"));
         byte[] data = (file.getDownloadUrl() != null ? file.getDownloadUrl() : "Empty file").getBytes(StandardCharsets.UTF_8);
 
         return ResponseEntity.ok()

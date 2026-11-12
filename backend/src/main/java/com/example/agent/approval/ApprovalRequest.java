@@ -10,6 +10,9 @@ public class ApprovalRequest {
     @Id
     private UUID id;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(name = "task_id")
     private UUID taskId;
 
@@ -40,7 +43,12 @@ public class ApprovalRequest {
     protected ApprovalRequest() {}
 
     public ApprovalRequest(UUID taskId, String platform, String actionDescription, String riskLevel, String payload, String consequences) {
+        this(null, taskId, platform, actionDescription, riskLevel, payload, consequences);
+    }
+
+    public ApprovalRequest(UUID userId, UUID taskId, String platform, String actionDescription, String riskLevel, String payload, String consequences) {
         this.id = UUID.randomUUID();
+        this.userId = userId;
         this.taskId = taskId;
         this.platform = platform;
         this.actionDescription = actionDescription;
@@ -52,6 +60,7 @@ public class ApprovalRequest {
     }
 
     public UUID getId() { return id; }
+    public UUID getUserId() { return userId; }
     public UUID getTaskId() { return taskId; }
     public String getPlatform() { return platform; }
     public String getActionDescription() { return actionDescription; }
@@ -61,6 +70,8 @@ public class ApprovalRequest {
     public String getConsequences() { return consequences; }
     public Instant getRequestedAt() { return requestedAt; }
     public Instant getResolvedAt() { return resolvedAt; }
+
+    public void setUserId(UUID userId) { this.userId = userId; }
 
     public void resolve(String status) {
         this.approvalStatus = status;

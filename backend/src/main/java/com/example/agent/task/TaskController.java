@@ -1,14 +1,20 @@
 package com.example.agent.task;
 
+import com.example.agent.ai.UserAiConfigService;
 import com.example.agent.approval.ApprovalRepository;
+import com.example.agent.auth.AuthInterceptor;
 import com.example.agent.connection.*;
 import com.example.agent.file.FileRepository;
 import com.example.agent.file.GeneratedFile;
+import com.example.agent.personalization.PersonalizationService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.http.*;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.*;
 
 @RestController
@@ -20,23 +26,40 @@ public class TaskController {
     private final WorkerClient worker;
     private final FileRepository files;
     private final ApprovalRepository approvals;
+    private final ObjectMapper objectMapper;
+    private final PersonalizationService personalizationService;
+    private final UserAiConfigService aiConfigService;
 
-    public TaskController(TaskRepository t, ActionRepository a, ConnectionRepository c, WorkerClient w, FileRepository f, ApprovalRepository app) {
+    public TaskController(
+            TaskRepository t,
+            ActionRepository a,
+            ConnectionRepository c,
+            WorkerClient w,
+            FileRepository f,
+            ApprovalRepository app,
+            ObjectMapper objectMapper,
+            PersonalizationService personalizationService,
+            UserAiConfigService aiConfigService
+    ) {
         this.tasks = t;
         this.actions = a;
         this.connections = c;
         this.worker = w;
         this.files = f;
         this.approvals = app;
+        this.objectMapper = objectMapper;
+        this.personalizationService = personalizationService;
+        this.aiConfigService = aiConfigService;
     }
 
-    public record CreateTask(@NotNull UUID connectionId, @NotBlank @Size(max=2000) String prompt) {}
+    public record CreateTask(@NotNull UUID connectionId, @NotBlank @Size(max = 2000) String prompt, List<Map<String, Object>> history) {}
 
     @PostMapping
-    public ResponseEntity<AgentTask> create(@Valid @RequestBody CreateTask request) {
-        var connection = connections.findById(request.connectionId())
+    public ResponseEntity<AgentTask> create(@Valid @RequestBody CreateTask request, HttpServletRequest httpReq) {
+        UUID userId = AuthInterceptor.requireUserId(httpReq);
+        var connection = connections.findByIdAndUserId(request.connectionId(), userId)
                 .orElseThrow(() -> new NoSuchElementException("Website connection not found"));
-        var task = tasks.save(new AgentTask(connection.getId(), request.prompt()));
+        var task = tasks.save(new AgentTask(userId, connection.getId(), request.prompt()));
 
         // Observe-Plan-Act-Verify sequence
         actions.save(new AgentAction(task.getId(), "TASK_PLANNING", "Analyzed natural language intent and generated execution plan", "COMPLETED"));
@@ -49,11 +72,19 @@ public class TaskController {
             actions.save(new AgentAction(task.getId(), "PAGE_NAVIGATION", "Navigating isolated browser context to " + connection.getWebsiteUrl(), "COMPLETED"));
             actions.save(new AgentAction(task.getId(), "PAGE_INSPECTION", "Extracting semantic DOM structure, page text, and interactive anchors", "RUNNING"));
 
-            Map<?, ?> result = worker.inspect(connection.getWebsiteUrl(), request.prompt());
+            Map<String, Object> personalContext = personalizationService.buildPersonalContextPayload(userId);
+            if (Boolean.TRUE.equals(personalContext.get("enabled"))) {
+                String summaryText = String.valueOf(personalContext.getOrDefault("summaryText", ""));
+                List<?> personalFiles = (List<?>) personalContext.getOrDefault("files", List.of());
+                if (!summaryText.isBlank() || !personalFiles.isEmpty()) {
+                    actions.save(new AgentAction(task.getId(), "PERSONALIZATION_CONTEXT", "Attached personal profile data and " + personalFiles.size() + " file(s) if needed", "COMPLETED"));
+                }
+            }
+            Map<String, Object> aiConfig = aiConfigService.getDecryptedWorkerConfig(userId);
+            Map<?, ?> result = worker.inspect(connection.getWebsiteUrl(), request.prompt(), personalContext, request.history(), userId, aiConfig);
             Object summary = result.get("summary");
             task.update("COMPLETED", summary == null ? "Inspection completed" : String.valueOf(summary), null);
 
-            // Record dynamic execution steps returned by AI Action Planner & Executor
             if (result.containsKey("executionLogs")) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> logs = (List<Map<String, Object>>) result.get("executionLogs");
@@ -69,31 +100,37 @@ public class TaskController {
 
             actions.save(new AgentAction(task.getId(), "VERIFICATION", "Outcome verified against original user prompt", "COMPLETED"));
 
-            // Check if structured records were extracted
             if (result.containsKey("extractedRecords")) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> records = (List<Map<String, Object>>) result.get("extractedRecords");
                 if (records != null && !records.isEmpty()) {
+                    try {
+                        task.setExtractedItems(objectMapper.writeValueAsString(records));
+                    } catch (Exception ignored) {}
+
                     StringBuilder csv = new StringBuilder();
-                    csv.append("Item_Number,Title,URL,Category,Extracted_At\n");
+                    csv.append("Item_Number,Title,URL,Image_URL,Category,Extracted_At\n");
                     int idx = 1;
                     for (Map<String, Object> rec : records) {
                         csv.append(idx++).append(",")
                            .append("\"").append(String.valueOf(rec.getOrDefault("title", "")).replace("\"", "\"\"")).append("\",")
                            .append("\"").append(String.valueOf(rec.getOrDefault("href", "")).replace("\"", "\"\"")).append("\",")
+                           .append("\"").append(String.valueOf(rec.getOrDefault("imageUrl", "")).replace("\"", "\"\"")).append("\",")
                            .append("\"").append(String.valueOf(rec.getOrDefault("category", "General")).replace("\"", "\"\"")).append("\",")
                            .append(new Date()).append("\n");
                     }
                     files.save(new GeneratedFile(
+                        userId,
                         task.getId(),
-                        "extracted-data-" + connection.getName().toLowerCase().replaceAll("\\s+", "-") + ".csv",
+                        "extracted-data-" + connection.getName().toLowerCase(Locale.ROOT).replaceAll("\\s+", "-") + ".csv",
                         "CSV",
                         records.size(),
                         csv.length() > 300 ? csv.substring(0, 300) + "..." : csv.toString(),
                         csv.toString()
                     ));
                 }
-            } else if (result.containsKey("page")) {
+            }
+            if ((task.getExtractedItems() == null || task.getExtractedItems().isBlank()) && result.containsKey("page")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> pageData = (Map<String, Object>) result.get("page");
                 @SuppressWarnings("unchecked")
@@ -113,15 +150,15 @@ public class TaskController {
                 }
 
                 files.save(new GeneratedFile(
+                    userId,
                     task.getId(),
-                    "inspection-report-" + connection.getName().toLowerCase().replaceAll("\\s+", "-") + ".csv",
+                    "inspection-report-" + connection.getName().toLowerCase(Locale.ROOT).replaceAll("\\s+", "-") + ".csv",
                     "CSV",
                     Math.max(1, links.size()),
                     csv.length() > 300 ? csv.substring(0, 300) + "..." : csv.toString(),
                     csv.toString()
                 ));
             }
-
         } catch (Exception ex) {
             task.update("FAILED", null, "Worker execution failed. Check worker health and URL policy: " + ex.getMessage());
             actions.save(new AgentAction(task.getId(), "PAGE_INSPECTION", "Inspection failed: " + ex.getMessage(), "FAILED"));
@@ -132,19 +169,24 @@ public class TaskController {
     }
 
     @GetMapping
-    public List<AgentTask> list() {
-        return tasks.findAll();
+    public List<AgentTask> list(HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        return tasks.findByUserIdOrderByCreatedAtAsc(userId);
     }
 
     @GetMapping("/{id}")
-    public Map<String, Object> get(@PathVariable UUID id) {
-        var task = tasks.findById(id).orElseThrow(() -> new NoSuchElementException("Task not found"));
+    public Map<String, Object> get(@PathVariable UUID id, HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        var task = tasks.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new NoSuchElementException("Task not found"));
         return Map.of("task", task, "actions", actions.findByTaskIdOrderByCreatedAtAsc(id));
     }
 
     @PostMapping("/{id}/cancel")
-    public AgentTask cancel(@PathVariable UUID id) {
-        var task = tasks.findById(id).orElseThrow(() -> new NoSuchElementException("Task not found"));
+    public AgentTask cancel(@PathVariable UUID id, HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        var task = tasks.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new NoSuchElementException("Task not found"));
         if (List.of("COMPLETED", "FAILED", "CANCELLED").contains(task.getStatus())) return task;
         task.update("CANCELLED", task.getResult(), null);
         actions.save(new AgentAction(task.getId(), "TASK_CANCELLATION", "Task cancelled by user instruction", "CANCELLED"));
@@ -153,8 +195,9 @@ public class TaskController {
 
     @DeleteMapping("/{id}")
     @Transactional
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        if (!tasks.existsById(id)) {
+    public ResponseEntity<Void> delete(@PathVariable UUID id, HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        if (tasks.findByIdAndUserId(id, userId).isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         actions.deleteByTaskId(id);
@@ -166,11 +209,15 @@ public class TaskController {
 
     @DeleteMapping
     @Transactional
-    public ResponseEntity<Void> deleteAll() {
-        actions.deleteAll();
-        files.deleteAll();
-        approvals.deleteAll();
-        tasks.deleteAll();
+    public ResponseEntity<Void> deleteAll(HttpServletRequest req) {
+        UUID userId = AuthInterceptor.requireUserId(req);
+        List<AgentTask> userTasks = tasks.findByUserIdOrderByCreatedAtAsc(userId);
+        for (AgentTask t : userTasks) {
+            actions.deleteByTaskId(t.getId());
+            files.deleteByTaskId(t.getId());
+            approvals.deleteByTaskId(t.getId());
+        }
+        tasks.deleteAll(userTasks);
         return ResponseEntity.noContent().build();
     }
 }

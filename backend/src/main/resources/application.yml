@@ -17,6 +17,10 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
 management:
   endpoints:
     web:
@@ -26,3 +30,12 @@ app:
   worker-url: ${WORKER_URL:http://localhost:3001}
   encryption-key: ${APP_ENCRYPTION_KEY:}
   cors-origin: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  personal-files-dir: ${PERSONAL_FILES_DIR:data/personal-files}
+  auth:
+    jwt-secret: ${APP_AUTH_JWT_SECRET:}
+    token-ttl-seconds: ${APP_AUTH_TOKEN_TTL_SECONDS:604800}
+    frontend-url: ${FRONTEND_URL:http://localhost:5173}
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/v1/auth/google/callback}

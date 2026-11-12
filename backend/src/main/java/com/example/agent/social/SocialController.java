@@ -2,6 +2,8 @@ package com.example.agent.social;
 
 import com.example.agent.approval.ApprovalRepository;
 import com.example.agent.approval.ApprovalRequest;
+import com.example.agent.auth.AuthInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
@@ -19,9 +21,11 @@ public class SocialController {
     public record SocialPostDraft(String content, List<String> platforms, String mediaUrl, boolean schedule, String scheduledTime) {}
 
     @PostMapping("/prepare-post")
-    public ResponseEntity<Map<String, Object>> preparePost(@RequestBody SocialPostDraft draft) {
+    public ResponseEntity<Map<String, Object>> preparePost(@RequestBody SocialPostDraft draft, HttpServletRequest httpReq) {
+        UUID userId = AuthInterceptor.requireUserId(httpReq);
         // Enforce Risk-based approval per Section 12 & Section 7.1
         ApprovalRequest approval = new ApprovalRequest(
+            userId,
             null,
             String.join(", ", draft.platforms()),
             "Publish social media post to: " + String.join(", ", draft.platforms()),
@@ -40,7 +44,8 @@ public class SocialController {
     }
 
     @GetMapping("/whatsapp/inbox")
-    public List<Map<String, Object>> getWhatsAppInbox() {
+    public List<Map<String, Object>> getWhatsAppInbox(HttpServletRequest httpReq) {
+        AuthInterceptor.requireUserId(httpReq);
         return List.of(
             Map.of(
                 "id", "WA-9876543210",

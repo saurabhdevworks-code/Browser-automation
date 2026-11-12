@@ -10,6 +10,9 @@ public class GeneratedFile {
     @Id
     private UUID id;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(name = "task_id")
     private UUID taskId;
 
@@ -25,7 +28,7 @@ public class GeneratedFile {
     @Column(name = "content_preview", columnDefinition = "TEXT")
     private String contentPreview;
 
-    @Column(name = "download_url", length = 1024)
+    @Column(name = "download_url", columnDefinition = "TEXT")
     private String downloadUrl;
 
     @Column(name = "created_at", nullable = false)
@@ -34,7 +37,12 @@ public class GeneratedFile {
     protected GeneratedFile() {}
 
     public GeneratedFile(UUID taskId, String fileName, String fileType, int rowCount, String contentPreview, String downloadUrl) {
+        this(null, taskId, fileName, fileType, rowCount, contentPreview, downloadUrl);
+    }
+
+    public GeneratedFile(UUID userId, UUID taskId, String fileName, String fileType, int rowCount, String contentPreview, String downloadUrl) {
         this.id = UUID.randomUUID();
+        this.userId = userId;
         this.taskId = taskId;
         this.fileName = fileName;
         this.fileType = fileType;
@@ -45,6 +53,7 @@ public class GeneratedFile {
     }
 
     public UUID getId() { return id; }
+    public UUID getUserId() { return userId; }
     public UUID getTaskId() { return taskId; }
     public String getFileName() { return fileName; }
     public String getFileType() { return fileType; }
@@ -52,4 +61,6 @@ public class GeneratedFile {
     public String getContentPreview() { return contentPreview; }
     public String getDownloadUrl() { return downloadUrl; }
     public Instant getCreatedAt() { return createdAt; }
+
+    public void setUserId(UUID userId) { this.userId = userId; }
 }

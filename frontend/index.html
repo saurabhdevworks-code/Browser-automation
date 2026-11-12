@@ -1,1 +1,40 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#f7f8fa"/><link rel="icon" type="image/png" href="/navio-logo.png"/><title>Navio — Universal AI Browser Agent</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f8fa" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#040915" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600&display=swap" rel="stylesheet" />
+    <link id="navio-favicon" rel="icon" type="image/png" sizes="128x128" href="/navio-favicon-light.png" />
+    <script>
+      (function () {
+        var mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+        function syncSystemFavicon() {
+          var link = document.getElementById("navio-favicon");
+          if (!link) return;
+          var isDark = Boolean(mq && mq.matches);
+          link.setAttribute("href", isDark ? "/navio-favicon-dark.png" : "/navio-favicon-light.png");
+        }
+        syncSystemFavicon();
+        if (mq) {
+          if (typeof mq.addEventListener === "function") {
+            mq.addEventListener("change", syncSystemFavicon);
+          } else if (typeof mq.addListener === "function") {
+            mq.addListener(syncSystemFavicon);
+          }
+        }
+      })();
+    </script>
+    <title>Navio - Universal AI Browser Agent</title>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
