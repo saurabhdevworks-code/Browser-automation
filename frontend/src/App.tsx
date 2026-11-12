@@ -2703,6 +2703,16 @@ export default function App() {
       { kind: "add" as const, id: "__add__" as const, label: "+ Connect new website...", subtitle: "Register custom URL or portal" }
     ];
     const safeMentionIdx = Math.min(mentionActiveIndex, Math.max(0, mentionOptions.length - 1));
+    const selectedConn = connections.find(c => c.id === selectedTarget);
+    const activeThreadTarget = getActiveThreadTargetLabel();
+    const capsulePlaceholder =
+      selectedTarget === "all" || activeThreadTarget.toLowerCase() === "all"
+        ? "Ask Navio across all connected platforms..."
+        : selectedConn
+          ? `Ask Navio on ${selectedConn.name}...`
+          : activeThreadTarget
+            ? `Ask Navio on ${activeThreadTarget}...`
+            : "Ask Navio";
 
     const handleSelectMentionOption = (opt: MentionOption) => {
       if (opt.kind === "add") {
@@ -2910,7 +2920,7 @@ export default function App() {
               setShowMentionDropdown(false);
             }
           }}
-          placeholder="Ask Gemini"
+          placeholder={capsulePlaceholder}
         />
 
         {/* Send Button */}
