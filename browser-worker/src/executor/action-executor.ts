@@ -2,6 +2,7 @@ import fs from "node:fs";
 import type { Page } from "playwright";
 import type { ActionStep, PersonalizationContext } from "../ai/groq-planner.js";
 import { extractStructuredJobs } from "../jobs/job-automation.js";
+import { extractStructuredLeads } from "../leads/lead-automation.js";
 
 export interface ExecutionLog {
   stepIndex: number;
@@ -19,6 +20,12 @@ export interface ExtractedItem {
   fileExt?: string;
   category?: string;
   snippet?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  role?: string;
+  location?: string;
+  platform?: string;
 }
 
 export interface ExecutionResult {
@@ -413,6 +420,13 @@ async function performDataExtraction(page: Page, task?: string): Promise<Extract
   const genericDownloadAll = /\b(?:download|export|save)\s+(?:all|them|these|those|everything)\b/i.test(taskLower) || /^download$/i.test(taskLower.trim());
   const wantsImages = /(image|img|photo|picture|gallery|media|thumbnail|visual|design|project)/i.test(taskLower) || genericDownloadAll;
   const wantsFiles = /(file|pdf|doc|csv|excel|xlsx|zip|download|report|document)/i.test(taskLower);
+  const wantsLeads = /\b(lead|leads|prospect|prospects|client|clients|customer|customers|contact|contacts|outreach|b2b|b2c|email|emails|phone)\b/i.test(taskLower) && !wantsImages;
+  if (wantsLeads) {
+    const leadCards = await extractStructuredLeads(page);
+    if (leadCards.length > 0) {
+      return leadCards;
+    }
+  }
   const wantsJobs = /(job|jobs|career|hiring|opening|vacancy|role|developer|engineer|naukri|linkedin|indeed|internshala|foundit)/i.test(taskLower) && !wantsImages;
   if (wantsJobs) {
     const jobCards = await extractStructuredJobs(page);

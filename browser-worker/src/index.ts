@@ -15,6 +15,7 @@ import {
 } from "./ai/groq-planner.js";
 import { executePlan } from "./executor/action-executor.js";
 import { runJobScrapeAndApply } from "./jobs/job-automation.js";
+import { runLeadGeneration } from "./leads/lead-automation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -148,6 +149,43 @@ app.post("/v1/inspect", async (req, res) => {
       });
     } catch (err) {
       return res.status(422).json({ error: err instanceof Error ? err.message : "Job automation failed" });
+    }
+  }
+
+  const isLeadGenerationTask =
+    /\b(lead|leads|prospect|prospects|clients?|customers?|outreach|b2b|b2c|contacts?)\b/i.test(parsed.data.task) &&
+    /\b(generat\w*|find|get|scrap\w*|extract|collect|build|pull|fetch|search|list)\b/i.test(parsed.data.task) &&
+    !/(image|photo|design|canva|logo)/i.test(parsed.data.task);
+  if (isLeadGenerationTask) {
+    try {
+      const leadResult = await runLeadGeneration({
+        userId: safeUser,
+        url: parsed.data.url,
+        prompt: parsed.data.task,
+        personalization: parsed.data.personalization,
+        aiConfig: perUserAiConfig
+      });
+      return res.json({
+        summary: leadResult.summary,
+        plan: {
+          engine: "lead-generation-engine",
+          explanation: leadResult.summary,
+          actions: leadResult.executionLogs
+        },
+        executionLogs: leadResult.executionLogs,
+        extractedRecords: leadResult.extractedRecords,
+        matchedLeads: leadResult.matchedLeads,
+        allScrapedCount: leadResult.allScrapedCount,
+        page: {
+          title: leadResult.page.title,
+          url: leadResult.page.url,
+          text: "",
+          links: leadResult.extractedRecords.map(r => ({ text: r.title, href: r.href || leadResult.page.url })),
+          screenshot: leadResult.page.screenshot
+        }
+      });
+    } catch (err) {
+      return res.status(422).json({ error: err instanceof Error ? err.message : "Lead generation failed" });
     }
   }
 

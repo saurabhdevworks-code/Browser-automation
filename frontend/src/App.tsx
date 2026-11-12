@@ -63,7 +63,7 @@ type Connection = { id: string; name: string; websiteUrl: string; status: string
 type Conversation = { id: string; title: string; createdAt: string; updatedAt: string };
 type PersonalProfile = { id: string; enabled: boolean; fullName: string; email: string; phone: string; location: string; customText: string; updatedAt?: string };
 type PersonalFile = { id: string; fileName: string; contentType: string; fileSize: number; extractedText?: string; createdAt: string };
-type ScrapedItem = { title: string; href?: string; imageUrl?: string; fileExt?: string; category?: string; snippet?: string };
+type ScrapedItem = { title: string; href?: string; imageUrl?: string; fileExt?: string; category?: string; snippet?: string; email?: string; phone?: string; company?: string; role?: string; location?: string; platform?: string; matchScore?: number };
 type Task = { id: string; connectionId: string; prompt: string; status: string; result?: string; extractedItems?: string; createdAt: string };
 type Action = { id: string; actionType: string; description: string; status: string; createdAt: string };
 type Capability = { key: string; name: string; status: string; riskLevel: string; description: string };
@@ -2085,37 +2085,65 @@ export default function App() {
       return;
     }
 
-    // Determine target: check query for explicit @all or @websiteName, then targetOverride, then selectedTarget
+    // Determine target: check query for @all, @websiteName, named connected platforms, or "connected platforms" / lead-gen intent
     let resolvedTarget = "";
+    let resolvedMultiIds: string[] = [];
 
     if (/@all\b/i.test(rawPrompt)) {
       resolvedTarget = "all";
     } else {
-      // Check if prompt matches any connection name like @Canva
-      for (const conn of connections) {
+      const explicitMentions = connections.filter(conn => {
         const pattern = new RegExp(`@${conn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-        if (pattern.test(rawPrompt)) {
-          resolvedTarget = conn.id;
-          break;
-        }
+        return pattern.test(rawPrompt);
+      });
+      if (explicitMentions.length > 1) {
+        resolvedTarget = "multi";
+        resolvedMultiIds = explicitMentions.map(c => c.id);
+      } else if (explicitMentions.length === 1) {
+        resolvedTarget = explicitMentions[0].id;
       }
     }
 
-    // Fallback to targetOverride, selectedTarget, or active conversation platform continuity
     if (!resolvedTarget) {
       if (targetOverride) {
         resolvedTarget = targetOverride;
       } else if (selectedTarget) {
         resolvedTarget = selectedTarget;
-      } else if (isExplicitBrowserFollowupAction(rawPrompt)) {
-        resolvedTarget = inferActiveConversationTarget(rawPrompt);
+      } else {
+        const asksConnectedPlatforms =
+          /\b(?:connected\s+(?:platforms?|sites?|websites?|portals?|accounts?)|all\s+(?:connected\s+)?(?:platforms?|sites?|websites?|portals?)|across\s+(?:my\s+)?(?:platforms?|sites?|websites?|portals?)|based\s+on\s+(?:my\s+|the\s+)?connected)\b/i.test(rawPrompt);
+        const asksLeadAction =
+          /\b(lead|leads|prospects?|outreach)\b/i.test(rawPrompt) &&
+          /\b(generat\w*|find|get|scrap\w*|extract|collect|build|pull|fetch|search|create|make|list)\b/i.test(rawPrompt);
+
+        if (asksConnectedPlatforms) {
+          resolvedTarget = "all";
+        } else {
+          const hasActionVerb = /\b(generat\w*|find|get|scrap\w*|extract|collect|search|open|apply|check|post|send|fill|automate|run|pull|fetch|list|download|export)\b/i.test(rawPrompt);
+          const namedConns = hasActionVerb
+            ? connections.filter(conn => {
+                const nameRx = new RegExp(`\\b${conn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+                return nameRx.test(rawPrompt);
+              })
+            : [];
+          if (namedConns.length > 1) {
+            resolvedTarget = "multi";
+            resolvedMultiIds = namedConns.map(c => c.id);
+          } else if (namedConns.length === 1) {
+            resolvedTarget = namedConns[0].id;
+          } else if (asksLeadAction && connections.length > 0) {
+            resolvedTarget = "all";
+          } else if (isExplicitBrowserFollowupAction(rawPrompt)) {
+            resolvedTarget = inferActiveConversationTarget(rawPrompt);
+          }
+        }
       }
     }
 
     const isScheduleReq = /\b(schedule|recurring|every|daily|weekly|hourly|cron)\b/i.test(rawPrompt);
     const userMsgId = "user-" + Date.now();
     const assistMsgId = "asst-" + Date.now();
-    const targetLabel = resolvedTarget === "all" ? "all" : (connections.find(c => c.id === resolvedTarget)?.name || "");
+    const targetLabel = resolvedTarget === "all" ? "all" : resolvedTarget === "multi" ? connections.filter(c => resolvedMultiIds.includes(c.id)).map(c => c.name).join(", ") : (connections.find(c => c.id === resolvedTarget)?.name || "");
 
     setConversationStarted(true);
     setShowPlusMenu(false);
@@ -2252,9 +2280,12 @@ export default function App() {
       return;
     }
 
-    if (resolvedTarget === "all") {
-      if (connections.length === 0) {
-        const failText = "No websites connected yet. Please add a website connection.";
+    if (resolvedTarget === "all" || resolvedTarget === "multi") {
+      const targetConns = resolvedTarget === "multi"
+        ? connections.filter(c => resolvedMultiIds.includes(c.id))
+        : connections;
+      if (targetConns.length === 0) {
+        const failText = "No websites connected yet. Please connect at least one platform first.";
         showToast("No websites connected yet. Register a website to begin.", "info");
         setShowQuickAddModal(true);
         setChatMessages(prev => prev.map(m => m.id === assistMsgId ? { ...m, status: "FAILED", content: failText } : m));
@@ -2263,26 +2294,77 @@ export default function App() {
         return;
       }
       setBusy(true);
-      showToast(`Executing across all ${connections.length} connected platforms...`, "info");
+      showToast(`Executing across ${targetConns.length} connected platform(s)...`, "info");
       try {
         const cleanPrompt = rawPrompt.replace(/@all\s*/gi, "").trim() || rawPrompt;
-        for (const conn of connections) {
-          await apiFetch(`${API}/tasks`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ connectionId: conn.id, prompt: cleanPrompt, history: historyWindow })
-          });
+
+        if (isScheduleReq) {
+          const detectedTime = parseDailyScheduleTimeFromPrompt(cleanPrompt);
+          const detectedCadence = parseCadenceFromPrompt(cleanPrompt);
+          for (const conn of targetConns) {
+            try {
+              await apiFetch(`${API}/schedules`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: `${detectedCadence === "HOURLY" ? "Hourly" : detectedCadence === "WEEKDAYS" ? "Weekday" : "Daily"} ${conn.name} (${detectedTime})`,
+                  connectionId: conn.id,
+                  taskMode: "AUTO",
+                  cadence: detectedCadence,
+                  requirements: cleanPrompt,
+                  preferredLocation: personalProfile.location || "",
+                  scheduleTime: detectedTime,
+                  timezone: "Asia/Kolkata",
+                  autoApply: /\b(apply|submit)\b/i.test(cleanPrompt) && /(job|jobs|naukri|linkedin|indeed|internshala|foundit)/i.test(cleanPrompt + " " + conn.name),
+                  maxApplyPerRun: 5,
+                  enabled: true
+                })
+              });
+            } catch (_) {}
+          }
         }
+
+        const multiRes = await apiFetch(`${API}/tasks/multi`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            connectionIds: resolvedTarget === "multi" ? resolvedMultiIds : undefined,
+            prompt: cleanPrompt,
+            history: historyWindow
+          })
+        });
+        const multiData = await multiRes.json();
+        if (!multiRes.ok) throw new Error(multiData.error || "Multi-platform execution failed");
+
         await loadData();
-        const summaryReply = isScheduleReq
-          ? `Automation scheduled across all ${connections.length} registered platforms. The agent will run recurring inspections on each portal.`
-          : `Executed Observe-Plan-Act-Verify cycle across all ${connections.length} registered platforms. Navigation links and DOM records updated.`;
+
+        let latestFile: GeneratedFile | undefined = multiData.combinedFile || undefined;
+        try {
+          const fileRes = await apiFetch(`${API}/files`);
+          if (fileRes.ok) {
+            const filesData: GeneratedFile[] = await fileRes.json();
+            setFiles(filesData);
+            if (!latestFile && multiData.taskId) {
+              latestFile = filesData.find(f => f.taskId === multiData.taskId);
+            }
+          }
+        } catch (_) {}
+
+        const summaryReply =
+          multiData.combinedSummary ||
+          (isScheduleReq
+            ? `Automation scheduled across ${targetConns.length} connected platform(s).`
+            : `Executed across ${targetConns.length} connected platform(s).`);
+        const parsedCombinedItems = parseScrapedItems(multiData.extractedItems);
+
         setChatMessages(prev => prev.map(m => {
           if (m.id === assistMsgId) {
             return {
               ...m,
-              status: "COMPLETED",
-              content: summaryReply
+              status: multiData.status === "FAILED" ? "FAILED" : "COMPLETED",
+              content: summaryReply,
+              file: latestFile,
+              scrapedItems: parsedCombinedItems
             };
           }
           return m;
@@ -2292,11 +2374,19 @@ export default function App() {
           role: "assistant",
           targetName: targetLabel,
           content: summaryReply,
-          status: "COMPLETED",
+          status: multiData.status === "FAILED" ? "FAILED" : "COMPLETED",
+          taskId: multiData.taskId,
+          fileId: latestFile?.id,
+          scrapedItems: multiData.extractedItems || undefined,
           isSchedule: isScheduleReq,
-          scheduleDetails: isScheduleReq ? "Recurring schedule registered for execution cycle." : undefined
+          scheduleDetails: isScheduleReq ? "Recurring schedule registered across connected platforms." : undefined
         });
-        showToast(`All ${connections.length} tasks executed successfully.`, "success");
+
+        if (/\b(download|export|save)\b/i.test(rawPrompt) && latestFile) {
+          await triggerGeneratedFileDownload(latestFile);
+        }
+
+        showToast(`Completed across ${multiData.succeededCount ?? targetConns.length}/${targetConns.length} platform(s) (${multiData.totalExtracted ?? 0} record(s)).`, multiData.status === "FAILED" ? "error" : "success");
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Multi-target execution failed";
         setChatMessages(prev => prev.map(m => {
@@ -2460,12 +2550,70 @@ export default function App() {
   }
 
   function renderScrapedArtifacts(items?: ScrapedItem[], file?: GeneratedFile) {
-    const imageItems = (items || []).filter(item => Boolean(item.imageUrl));
-    const fileItems = (items || []).filter(item => !item.imageUrl && (item.href || item.fileExt));
+    const leadItems = (items || []).filter(item => item.category === "Lead" || Boolean(item.email || item.phone));
+    const visibleLeads = leadItems.slice(0, 15);
+    const imageItems = (items || []).filter(item => item.category !== "Lead" && !item.email && !item.phone && Boolean(item.imageUrl));
+    const fileItems = (items || []).filter(item => item.category !== "Lead" && !item.email && !item.phone && !item.imageUrl && (item.href || item.fileExt));
     const visibleFiles = fileItems.slice(0, 12);
 
     return (
       <>
+        {visibleLeads.length > 0 && (
+          <div className="geminiScrapedSection">
+            <div className="geminiScrapedSectionHeader">
+              <User size={14} />
+              <span>Generated Leads &amp; Contacts ({leadItems.length})</span>
+            </div>
+            <div className="geminiScrapedFilesList">
+              {visibleLeads.map((lead, idx) => (
+                <div className="geminiScrapedFileRow" key={`${lead.email || lead.href || lead.title}-${idx}`}>
+                  <div className="geminiScrapedFileInfo">
+                    <User size={15} className="geminiScrapedFileIcon" />
+                    <div className="geminiScrapedFileText">
+                      <b title={lead.title}>
+                        {lead.title}
+                        {lead.company || lead.role ? ` — ${[lead.role, lead.company].filter(Boolean).join(" @ ")}` : ""}
+                      </b>
+                      <small title={lead.snippet || lead.href || ""}>
+                        {[
+                          lead.platform,
+                          lead.location,
+                          lead.email,
+                          lead.phone
+                        ].filter(Boolean).join(" • ") || lead.href}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="geminiScrapedFileActions">
+                    {lead.platform && <span className="geminiScrapedExtTag">{lead.platform}</span>}
+                    {lead.email && (
+                      <a href={`mailto:${lead.email}`} className="geminiScrapedIconBtn" title={`Email ${lead.email}`}>
+                        <Mail size={14} />
+                      </a>
+                    )}
+                    {lead.href && (
+                      <a
+                        href={lead.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="geminiScrapedIconBtn"
+                        title="Open lead source"
+                        aria-label={`Open ${lead.title}`}
+                      >
+                        <ExternalLink size={14} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {leadItems.length > visibleLeads.length && (
+                <div className="geminiScrapedMoreNote">
+                  +{leadItems.length - visibleLeads.length} more leads included in the CSV export below.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {imageItems.length > 0 && (
           <div className="geminiScrapedSection">
             <div className="geminiScrapedSectionHeader">

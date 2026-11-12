@@ -356,21 +356,45 @@ public class ScheduledAutomationService {
     }
 
     private void saveGeneralRecordsCsvReport(UUID userId, UUID taskId, String portalName, String todayStr, List<Map<String, Object>> records) {
+        boolean hasLeadFields = records.stream().anyMatch(rec ->
+                "Lead".equalsIgnoreCase(String.valueOf(rec.getOrDefault("category", ""))) ||
+                (rec.get("email") != null && !String.valueOf(rec.get("email")).isBlank()) ||
+                (rec.get("phone") != null && !String.valueOf(rec.get("phone")).isBlank())
+        );
         StringBuilder csv = new StringBuilder();
-        csv.append("Item_Number,Title,Category,URL,Snippet\n");
         int idx = 1;
-        for (Map<String, Object> rec : records) {
-            csv.append(idx++).append(",")
-               .append(csvCell(rec.get("title"))).append(",")
-               .append(csvCell(rec.getOrDefault("category", "General"))).append(",")
-               .append(csvCell(rec.get("href"))).append(",")
-               .append(csvCell(rec.get("snippet"))).append("\n");
+        if (hasLeadFields) {
+            csv.append("Item_Number,Name_Or_Title,Platform,Role_Or_Company,Email,Phone,Location,URL,Snippet\n");
+            for (Map<String, Object> rec : records) {
+                Object roleOrCompany = rec.get("company") != null && !String.valueOf(rec.get("company")).isBlank()
+                        ? rec.get("company")
+                        : rec.get("role");
+                csv.append(idx++).append(",")
+                   .append(csvCell(rec.get("title"))).append(",")
+                   .append(csvCell(rec.getOrDefault("platform", portalName))).append(",")
+                   .append(csvCell(roleOrCompany)).append(",")
+                   .append(csvCell(rec.get("email"))).append(",")
+                   .append(csvCell(rec.get("phone"))).append(",")
+                   .append(csvCell(rec.get("location"))).append(",")
+                   .append(csvCell(rec.get("href"))).append(",")
+                   .append(csvCell(rec.get("snippet"))).append("\n");
+            }
+        } else {
+            csv.append("Item_Number,Title,Category,URL,Snippet\n");
+            for (Map<String, Object> rec : records) {
+                csv.append(idx++).append(",")
+                   .append(csvCell(rec.get("title"))).append(",")
+                   .append(csvCell(rec.getOrDefault("category", "General"))).append(",")
+                   .append(csvCell(rec.get("href"))).append(",")
+                   .append(csvCell(rec.get("snippet"))).append("\n");
+            }
         }
         String safeName = portalName.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-");
+        String prefix = hasLeadFields ? "scheduled-leads-" : "scheduled-task-";
         fileRepo.save(new GeneratedFile(
                 userId,
                 taskId,
-                "scheduled-task-" + safeName + "-" + todayStr + ".csv",
+                prefix + safeName + "-" + todayStr + ".csv",
                 "CSV",
                 records.size(),
                 csv.length() > 300 ? csv.substring(0, 300) + "..." : csv.toString(),

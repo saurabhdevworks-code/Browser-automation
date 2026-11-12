@@ -351,8 +351,8 @@ export async function planActions(input: PlanInput): Promise<PlanResult> {
   return planActionsHeuristic(input);
 }
 
-const SYSTEM_PROMPT = `You are Navio, an Autonomous AI Browser Automation Agent.
-Your job is to convert natural language instructions (English, Hindi, or Hinglish, e.g. "LinkedIn pe 10 Java jobs apply karo", "Canva me search karo banner designs", "Fill this form using my personal details", "Upload my resume") into concrete browser steps.
+const SYSTEM_PROMPT = `You are Navio, an Autonomous General-Purpose AI Browser Automation Agent that can execute any web workflow.
+Your job is to convert natural language instructions (English, Hindi, or Hinglish, e.g. "LinkedIn pe 10 Java jobs apply karo", "Generate leads for SaaS founders", "Canva me search karo banner designs", "Fill this form using my personal details", "Upload my resume", "Extract contacts, pricing, or tables to CSV") into concrete browser steps.
 
 Available action types:
 - "navigate": { "type": "navigate", "url": "https://...", "description": "Navigate to URL" }
@@ -638,29 +638,39 @@ export function planActionsHeuristic(input: PlanInput): PlanResult {
         description: "Scroll page to load lazy images and project cards"
       });
     } else if (searchMatch && !/(login|sign\s*in)/i.test(task)) {
-      let query = searchMatch[1].replace(/@\w+/g, "").replace(/\b(jobs?|designs?|in|on|pe|par|and|export|csv)\b/gi, " ").trim();
-      if (!query) query = "Jobs";
+      let query = searchMatch[1]
+        .replace(/@[a-zA-Z0-9_.\-]+/g, "")
+        .replace(/\b(jobs?|designs?|leads?|prospects?|clients?|contacts?|based|from|across|connected|platforms?|websites?|sites?|portals?|in|on|pe|par|and|export|csv)\b/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (query) {
+        explanation = `Searching for "${query}" and extracting resulting items.`;
 
-      explanation = `Searching for "${query}" and extracting resulting items.`;
+        actions.push({
+          type: "fill",
+          selector: "input[type='search'], input[name*='search' i], input[placeholder*='search' i], input[placeholder*='find' i], input[aria-label*='search' i], input[type='text']:visible",
+          value: query,
+          description: `Type query "${query}" into search input`
+        });
 
-      actions.push({
-        type: "fill",
-        selector: "input[type='search'], input[name*='search' i], input[placeholder*='search' i], input[placeholder*='find' i], input[aria-label*='search' i], input[type='text']:visible",
-        value: query,
-        description: `Type query "${query}" into search input`
-      });
+        actions.push({
+          type: "press",
+          key: "Enter",
+          description: "Submit search query"
+        });
 
-      actions.push({
-        type: "press",
-        key: "Enter",
-        description: "Submit search query"
-      });
-
-      actions.push({
-        type: "wait",
-        milliseconds: 4000,
-        description: "Allow client-side SPA to hydrate search results"
-      });
+        actions.push({
+          type: "wait",
+          milliseconds: 4000,
+          description: "Allow client-side SPA to hydrate search results"
+        });
+      } else {
+        explanation = "Inspecting connected platform and extracting matching items.";
+        actions.push({
+          type: "scroll",
+          description: "Scroll page to load visible cards and records"
+        });
+      }
     }
   }
 
