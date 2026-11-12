@@ -189,6 +189,66 @@ function HistoryDocClockIcon({
   );
 }
 
+function VerifiedBadgeIcon({
+  verified,
+  size = 18,
+  title,
+  style
+}: {
+  verified: boolean;
+  size?: number;
+  title?: string;
+  style?: React.CSSProperties;
+}) {
+  const sealPath =
+    "M 22.60 12.00 C 22.60 12.65, 20.38 13.57, 20.21 14.20 C 20.04 14.83, 21.50 16.74, 21.18 17.30 C 20.85 17.86, 18.47 17.55, 18.01 18.01 C 17.55 18.47, 17.86 20.85, 17.30 21.18 C 16.74 21.50, 14.83 20.04, 14.20 20.21 C 13.57 20.38, 12.65 22.60, 12.00 22.60 C 11.35 22.60, 10.43 20.38, 9.80 20.21 C 9.17 20.04, 7.26 21.50, 6.70 21.18 C 6.14 20.85, 6.45 18.47, 5.99 18.01 C 5.53 17.55, 3.15 17.86, 2.82 17.30 C 2.50 16.74, 3.96 14.83, 3.79 14.20 C 3.62 13.57, 1.40 12.65, 1.40 12.00 C 1.40 11.35, 3.62 10.43, 3.79 9.80 C 3.96 9.17, 2.50 7.26, 2.82 6.70 C 3.15 6.14, 5.53 6.45, 5.99 5.99 C 6.45 5.53, 6.14 3.15, 6.70 2.82 C 7.26 2.50, 9.17 3.96, 9.80 3.79 C 10.43 3.62, 11.35 1.40, 12.00 1.40 C 12.65 1.40, 13.57 3.62, 14.20 3.79 C 14.83 3.96, 16.74 2.50, 17.30 2.82 C 17.86 3.15, 17.55 5.53, 18.01 5.99 C 18.47 6.45, 20.85 6.14, 21.18 6.70 C 21.50 7.26, 20.04 9.17, 20.21 9.80 C 20.38 10.43, 22.60 11.35, 22.60 12.00 Z";
+  return (
+    <span
+      title={title || (verified ? "Verified / Authenticated" : "Connected (Not Authenticated)")}
+      aria-label={title || (verified ? "Verified" : "Not verified")}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        ...style
+      }}
+    >
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        {verified ? (
+          <>
+            <path d={sealPath} fill="#10b981" />
+            <path
+              d="M8.5 12.3l2.3 2.3 4.8-4.9"
+              stroke="#ffffff"
+              strokeWidth="2.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : (
+          <>
+            <path
+              d={sealPath}
+              fill="none"
+              stroke="#6b7280"
+              strokeWidth="1.65"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M8.5 12.3l2.3 2.3 4.8-4.9"
+              stroke="#6b7280"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        )}
+      </svg>
+    </span>
+  );
+}
+
 function parseScrapedItems(raw?: string): ScrapedItem[] {
   if (!raw) return [];
   try {
@@ -2733,13 +2793,16 @@ export default function App() {
                       <div className="geminiPlusMenuIcon">
                         <ConnectorLogo name={c.name} websiteUrl={c.websiteUrl} size={18} />
                       </div>
-                      <div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         <b>{c.name}</b>
-                        <small>{c.websiteUrl}</small>
+                        <small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.websiteUrl}</small>
                       </div>
-                      <span className={`tag ${c.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`} style={{ marginLeft: "auto", fontSize: "10px" }}>
-                        {c.status}
-                      </span>
+                      <VerifiedBadgeIcon
+                        verified={c.status === "AUTHENTICATED"}
+                        size={18}
+                        title={c.status === "AUTHENTICATED" ? "Authenticated" : c.status}
+                        style={{ marginLeft: "auto" }}
+                      />
                     </div>
                   ))}
                 </>
@@ -2793,12 +2856,12 @@ export default function App() {
                       </small>
                     </div>
                     {opt.kind === "connection" && (
-                      <span
-                        className={`tag ${opt.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`}
-                        style={{ marginLeft: "auto", fontSize: "10px", flexShrink: 0 }}
-                      >
-                        {opt.status}
-                      </span>
+                      <VerifiedBadgeIcon
+                        verified={opt.status === "AUTHENTICATED"}
+                        size={18}
+                        title={opt.status === "AUTHENTICATED" ? "Authenticated" : opt.status}
+                        style={{ marginLeft: "auto" }}
+                      />
                     )}
                   </div>
                 </React.Fragment>
@@ -3920,7 +3983,14 @@ export default function App() {
                       <td>Session / AES-256 Vault</td>
                       <td>Verified HTTP/HTTPS</td>
                       <td>
-                        <span className={`tag ${c.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`}>{c.status}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                          <VerifiedBadgeIcon
+                            verified={c.status === "AUTHENTICATED"}
+                            size={17}
+                            title={c.status === "AUTHENTICATED" ? "Authenticated" : c.status}
+                          />
+                          <span className={`tag ${c.status === "AUTHENTICATED" ? "tagGreen" : "tagBlue"}`}>{c.status}</span>
+                        </span>
                       </td>
                       <td>
                         <div className="actionBtnGroup">
